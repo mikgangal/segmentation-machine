@@ -220,17 +220,24 @@ RUN echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=v
 COPY xstartup /root/.vnc/xstartup
 RUN chmod +x /root/.vnc/xstartup
 
-# Desktop shortcuts
-RUN mkdir -p /root/Desktop
+# XFCE desktop configuration (disable Home/Trash icons)
+RUN mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml
+COPY xfce4-desktop.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+
+# Desktop shortcuts - Main desktop
+RUN mkdir -p /root/Desktop /root/Desktop/Tools
 
 COPY slicer.desktop /root/Desktop/Slicer.desktop
 COPY nninteractive.desktop /root/Desktop/nnInteractive.desktop
 COPY filebrowser.desktop /root/Desktop/FileTransfer.desktop
-COPY chrome.desktop /root/Desktop/Chrome.desktop
-COPY github.desktop /root/Desktop/GitHub.desktop
-COPY fiji.desktop /root/Desktop/Fiji.desktop
-COPY blender.desktop /root/Desktop/Blender.desktop
-RUN chmod +x /root/Desktop/*.desktop
+
+# Desktop shortcuts - Tools folder (optional/utility apps)
+COPY chrome.desktop /root/Desktop/Tools/Chrome.desktop
+COPY github.desktop /root/Desktop/Tools/GitHub.desktop
+COPY fiji.desktop /root/Desktop/Tools/Fiji.desktop
+COPY blender.desktop /root/Desktop/Tools/Blender.desktop
+
+RUN chmod +x /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop
 
 # File Browser launcher script
 COPY start-filebrowser /usr/local/bin/start-filebrowser
