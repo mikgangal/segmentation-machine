@@ -147,16 +147,17 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm /tmp/chrome.deb && \
     rm -rf /var/lib/apt/lists/*
 
-# Set Chrome as default browser (with --no-sandbox for Docker/root)
-# Create wrapper script
-RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox "$@"' \
+# Set Chrome as default browser (with Docker-compatible flags)
+# Flags: --no-sandbox (required for root), --test-type (hides sandbox warning),
+#        --no-default-browser-check, --disable-infobars (hide other warnings)
+RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type "$@"' \
     > /usr/local/bin/chrome-browser && chmod +x /usr/local/bin/chrome-browser
 
 # Set as system default
 RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/local/bin/chrome-browser 300 && \
     update-alternatives --set x-www-browser /usr/local/bin/chrome-browser
 
-# Configure XFCE to use Chrome with --no-sandbox
+# Configure XFCE to use Chrome with Docker-compatible flags
 RUN mkdir -p /root/.config/xfce4 /root/.local/share/xfce4/helpers && \
     echo 'WebBrowser=custom-WebBrowser' > /root/.config/xfce4/helpers.rc && \
     cat > /root/.local/share/xfce4/helpers/custom-WebBrowser.desktop << 'EOF'
@@ -166,8 +167,8 @@ Version=1.0
 Encoding=UTF-8
 Type=X-XFCE-Helper
 X-XFCE-Category=WebBrowser
-X-XFCE-CommandsWithParameter=/usr/bin/google-chrome-stable --no-sandbox "%s"
-X-XFCE-Commands=/usr/bin/google-chrome-stable --no-sandbox
+X-XFCE-CommandsWithParameter=/usr/bin/google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type "%s"
+X-XFCE-Commands=/usr/bin/google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type
 Name=Chrome
 Icon=google-chrome
 EOF
