@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GitHub
+Comment=GitHub Repository Manager
+Exec=xfce4-terminal -e github-launcher
+Icon=git
+Terminal=false
+Categories=Development;

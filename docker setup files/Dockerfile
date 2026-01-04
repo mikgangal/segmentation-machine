@@ -118,6 +118,26 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
 
 # ============================================
+# STAGE 4c2: Install GitHub CLI
+# ============================================
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && apt-get install -y gh && \
+    rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# STAGE 4c3: Install lazygit
+# ============================================
+RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') && \
+    curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
+    tar xf /tmp/lazygit.tar.gz -C /tmp lazygit && \
+    install /tmp/lazygit /usr/local/bin && \
+    rm /tmp/lazygit.tar.gz /tmp/lazygit
+
+# ============================================
 # STAGE 4d: Install Google Chrome and set as default browser
 # ============================================
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
@@ -300,11 +320,24 @@ COPY filebrowser.desktop /root/Desktop/FileTransfer.desktop
 COPY chrome.desktop /root/Desktop/Chrome.desktop
 COPY fiji.desktop /root/Desktop/Fiji.desktop
 COPY blender.desktop /root/Desktop/Blender.desktop
+COPY github.desktop /root/Desktop/GitHub.desktop
 RUN chmod +x /root/Desktop/*.desktop
 
 # File Browser launcher script
 COPY start-filebrowser /usr/local/bin/start-filebrowser
 RUN chmod +x /usr/local/bin/start-filebrowser
+
+# GitHub launcher script (handles auth, repo selection, and lazygit)
+COPY github-launcher /usr/local/bin/github-launcher
+RUN chmod +x /usr/local/bin/github-launcher
+
+# Create /GITHUB directory for repositories
+RUN mkdir -p /GITHUB
+
+# Configure git with noreply email by default
+RUN git config --global user.email "user@users.noreply.github.com" && \
+    git config --global user.name "user" && \
+    git config --global init.defaultBranch main
 
 # ============================================
 # STAGE 11: Startup script
