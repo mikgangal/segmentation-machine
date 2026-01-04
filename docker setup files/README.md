@@ -13,6 +13,7 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **Claude Code CLI** - AI coding assistant from Anthropic
 - **File Transfer** - Web-based file manager for uploads/downloads
 - **Google Chrome** - Default web browser
+- **GitHub CLI + lazygit** - Git workflow with visual terminal UI
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
 
@@ -43,6 +44,8 @@ docker-build/
 ├── chrome.desktop
 ├── fiji.desktop
 ├── blender.desktop
+├── github.desktop
+├── github-launcher
 ├── start-filebrowser
 ├── start.sh
 └── README.md (this file)
@@ -140,6 +143,34 @@ TurboVNC is optimized for VirtualGL and provides the best performance for 3D app
 ### Claude Code CLI
 - Run from terminal: `claude`
 - Requires `ANTHROPIC_API_KEY` environment variable
+
+### GitHub (Desktop Shortcut)
+The "GitHub" desktop shortcut provides a streamlined Git workflow:
+
+**First Run:**
+1. Click the "GitHub" desktop icon
+2. Authenticate via browser (GitHub CLI)
+3. Select a repository from your list to clone
+4. Opens automatically in lazygit
+
+**Subsequent Runs:**
+1. Click "GitHub" icon
+2. See all your repos with `[CLONED]` tags for local repos
+3. Select any repo:
+   - **Cloned repos**: Opens directly in lazygit
+   - **Uncloned repos**: Clones to `/GITHUB` then opens lazygit
+
+**Repository Location:** All repos are cloned to `/GITHUB`
+
+**Lazygit Quick Keys:**
+| Key | Action |
+|-----|--------|
+| `space` | Stage/unstage file |
+| `c` | Commit |
+| `p` | Pull |
+| `P` | Push |
+| `?` | Show all keybindings |
+| `q` | Quit |
 
 ## Using the Environment
 
@@ -314,6 +345,17 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 - [Blender](https://www.blender.org/) - 3D creation suite
 
 ## Version History
+
+- **v10** - January 2026
+  - **Added GitHub workflow** with desktop shortcut for streamlined Git operations
+  - Installed GitHub CLI (`gh`) for authentication and repo management
+  - Installed lazygit - visual terminal UI for Git
+  - Added `github-launcher` script that handles:
+    - Browser-based GitHub authentication on first run
+    - Lists all repos with `[CLONED]` indicator for local repos
+    - Clones selected repos to `/GITHUB` directory
+    - Opens lazygit automatically after selection
+  - Fixed Chrome default browser to use `--no-sandbox` for Docker compatibility
 
 - **v9** - January 2026
   - **Added GPU acceleration for Blender and Fiji** via VirtualGL wrapper scripts
