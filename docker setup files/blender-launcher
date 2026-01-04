@@ -1,0 +1,68 @@
+#!/bin/bash
+
+BLENDER_DIR="/opt/blender"
+BLENDER_BIN="$BLENDER_DIR/blender"
+
+# Function to launch Blender with GPU acceleration
+launch_blender() {
+    if [ -x /opt/VirtualGL/bin/vglrun ]; then
+        export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+        export __GLX_VENDOR_LIBRARY_NAME=nvidia
+        export VGL_DISPLAY=egl
+        exec /opt/VirtualGL/bin/vglrun -d egl "$BLENDER_BIN" "$@"
+    else
+        exec "$BLENDER_BIN" "$@"
+    fi
+}
+
+# Check if Blender is installed
+if [ -x "$BLENDER_BIN" ]; then
+    # Already installed - launch directly
+    launch_blender "$@"
+else
+    # Not installed - show installation in terminal
+    echo "================================================"
+    echo "  Blender is not installed. Installing now..."
+    echo "  This may take a few minutes."
+    echo "================================================"
+    echo ""
+
+    # Install dependencies if needed
+    if ! command -v xz &> /dev/null; then
+        echo "Installing dependencies..."
+        apt-get update && apt-get install -y --no-install-recommends xz-utils
+    fi
+
+    # Download Blender
+    echo "Downloading Blender 5.0.1..."
+    wget -q --show-progress "https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz" \
+        -O /tmp/blender.tar.xz
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to download Blender."
+        read -p "Press Enter to exit..."
+        exit 1
+    fi
+
+    # Extract Blender
+    echo "Extracting Blender..."
+    mkdir -p "$BLENDER_DIR"
+    tar -xf /tmp/blender.tar.xz -C "$BLENDER_DIR" --strip-components=1
+    rm /tmp/blender.tar.xz
+
+    # Create icon for desktop (optional, may fail if librsvg2-bin not installed)
+    if command -v rsvg-convert &> /dev/null && [ -f "$BLENDER_DIR/blender.svg" ]; then
+        echo "Creating desktop icon..."
+        rsvg-convert -w 128 -h 128 "$BLENDER_DIR/blender.svg" -o "$BLENDER_DIR/blender.png" 2>/dev/null
+    fi
+
+    echo ""
+    echo "================================================"
+    echo "  Blender installed successfully!"
+    echo "  Launching Blender..."
+    echo "================================================"
+    sleep 1
+
+    # Launch Blender
+    launch_blender "$@"
+fi

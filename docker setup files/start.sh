@@ -3,8 +3,14 @@ set -e
 
 echo "=== Starting 3D Slicer + nnInteractive Environment ==="
 
-# Model weights are pre-downloaded to /root/.nninteractive_weights
-# The server will find them when running from /root (default home directory)
+# Start background installation of 3D Slicer and model weights
+# This runs in parallel with the rest of startup for faster boot
+# Progress is logged to /var/log/slicer-install.log
+# The xstartup script will show progress on VNC connect if still running
+if [ -x /usr/local/bin/install-on-boot.sh ]; then
+    echo "Starting background installation of 3D Slicer and model weights..."
+    /usr/local/bin/install-on-boot.sh &
+fi
 
 # Configure SSH (optional)
 echo "root:runpod" | chpasswd
@@ -63,6 +69,10 @@ echo "File Transfer:  port 8080 (start from desktop icon)"
 echo "nnInteractive:  port 8000 (start from desktop icon)"
 echo ""
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'Not detected')"
+echo ""
+echo "NOTE: 3D Slicer and model weights are being installed in the background."
+echo "      Connect via VNC to see installation progress."
+echo "      Check /var/log/slicer-install.log for details."
 echo ""
 echo "For best performance, use TurboVNC client with direct TCP connection."
 echo ""

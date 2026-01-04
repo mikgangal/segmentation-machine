@@ -1,0 +1,58 @@
+#!/bin/bash
+
+FIJI_DIR="/opt/fiji"
+FIJI_BIN="$FIJI_DIR/fiji-linux-x64"
+WRAPPER="/usr/local/bin/Fiji"
+
+# Function to launch Fiji with GPU acceleration
+launch_fiji() {
+    if [ -x /opt/VirtualGL/bin/vglrun ]; then
+        export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+        export __GLX_VENDOR_LIBRARY_NAME=nvidia
+        export VGL_DISPLAY=egl
+        exec /opt/VirtualGL/bin/vglrun -d egl "$FIJI_BIN" "$@"
+    else
+        exec "$FIJI_BIN" "$@"
+    fi
+}
+
+# Check if Fiji is installed
+if [ -x "$FIJI_BIN" ]; then
+    # Already installed - launch directly
+    launch_fiji "$@"
+else
+    # Not installed - show installation in terminal
+    echo "================================================"
+    echo "  Fiji is not installed. Installing now..."
+    echo "  This may take a few minutes."
+    echo "================================================"
+    echo ""
+
+    # Download Fiji
+    echo "Downloading Fiji..."
+    wget -q --show-progress "https://downloads.imagej.net/fiji/latest/fiji-latest-linux64-jdk.zip" \
+        -O /tmp/fiji.zip
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to download Fiji."
+        read -p "Press Enter to exit..."
+        exit 1
+    fi
+
+    # Extract Fiji
+    echo "Extracting Fiji..."
+    unzip -q /tmp/fiji.zip -d /opt
+    mv /opt/Fiji "$FIJI_DIR"
+    chmod +x "$FIJI_BIN"
+    rm /tmp/fiji.zip
+
+    echo ""
+    echo "================================================"
+    echo "  Fiji installed successfully!"
+    echo "  Launching Fiji..."
+    echo "================================================"
+    sleep 1
+
+    # Launch Fiji
+    launch_fiji "$@"
+fi

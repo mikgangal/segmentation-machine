@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Fiji (ImageJ)
+Comment=Scientific image analysis (installs on first run)
+Exec=xfce4-terminal -x /usr/local/bin/fiji-launcher
+Icon=applications-science
+Terminal=false
+Type=Application
+Categories=Graphics;Science;

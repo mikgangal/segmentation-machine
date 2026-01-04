@@ -5,5 +5,8 @@
 *.desktop text eol=lf
 xstartup text eol=lf
 github-launcher text eol=lf
+fiji-launcher text eol=lf
+blender-launcher text eol=lf
+install-on-boot.sh text eol=lf
 start-filebrowser text eol=lf
 Dockerfile text eol=lf

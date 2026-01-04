@@ -1,21 +1,52 @@
 # 3D Slicer + nnInteractive Docker Image for RunPod (Lite)
 
-> **Note:** This is the **lite version** without Blender and Fiji. For the full version, see the `main` branch.
+> **Note:** This is the **lite version** with faster Docker builds. 3D Slicer and model weights are downloaded on first boot (not during Docker build). Blender and Fiji are available as optional on-demand installs.
 
 This folder contains everything needed to build a Docker image for running 3D Slicer with the nnInteractive AI segmentation extension on RunPod (or any GPU machine).
 
-## What's Included in the Image
+## Architecture Overview
 
-- **3D Slicer 5.10.0** - Medical image visualization platform
-- **nnInteractive Extension** - AI-assisted segmentation tool
+This lite version uses a **lazy-loading architecture** for faster Docker builds:
+
+| Component | When Installed | Size |
+|-----------|---------------|------|
+| CUDA + System packages | Docker build | ~2GB |
+| PyTorch + nnInteractive server | Docker build | ~3GB |
+| VirtualGL + TurboVNC | Docker build | ~50MB |
+| Desktop environment (XFCE) | Docker build | ~200MB |
+| **3D Slicer** | **On first boot** | ~500MB |
+| **Model weights** | **On first boot** | ~1GB |
+| **Fiji (optional)** | **On-demand** | ~500MB |
+| **Blender (optional)** | **On-demand** | ~1GB |
+
+### How It Works
+
+1. **Docker build** - Creates a smaller base image (~5GB vs ~7GB for full version)
+2. **First boot** - Background script downloads 3D Slicer + model weights
+3. **VNC connect** - If install is running, shows progress terminal; otherwise ready to use
+4. **Optional apps** - Fiji and Blender install on first click of their desktop shortcuts
+
+## What's Pre-Installed in the Image
+
 - **PyTorch Nightly (CUDA 12.8)** - Supports Blackwell, Ada, Ampere GPUs
+- **nnInteractive Server** - AI segmentation backend (ready immediately)
 - **TurboVNC + VirtualGL** - Optimized remote 3D visualization
 - **noVNC** - Browser-based VNC fallback (same desktop session)
-- **Pre-downloaded Model Weights** - Works immediately, no downloads on startup
 - **Claude Code CLI** - AI coding assistant from Anthropic
 - **File Transfer** - Web-based file manager for uploads/downloads
 - **Google Chrome** - Default web browser
 - **GitHub CLI + lazygit** - Git workflow with visual terminal UI
+
+## What's Downloaded on First Boot
+
+- **3D Slicer 5.10.0** - Medical image visualization platform (~500MB)
+- **nnInteractive Extension** - AI-assisted segmentation tool
+- **Model Weights** - Pre-trained nnInteractive models (~1GB)
+
+## Optional On-Demand Installs
+
+- **Fiji (ImageJ)** - Scientific image analysis (click desktop shortcut to install)
+- **Blender 5.0.1** - 3D modeling and animation (click desktop shortcut to install)
 
 ## Prerequisites
 
@@ -37,15 +68,20 @@ Download all files in this folder to your laptop. You should have:
 ```
 docker-build/
 ├── Dockerfile
-├── xstartup
+├── start.sh              # Container startup script
+├── install-on-boot.sh    # Background installer (Slicer + weights)
+├── xstartup              # VNC session startup (shows install progress)
 ├── slicer.desktop
 ├── nninteractive.desktop
 ├── filebrowser.desktop
 ├── chrome.desktop
 ├── github.desktop
+├── fiji.desktop          # On-demand Fiji installer
+├── blender.desktop       # On-demand Blender installer
 ├── github-launcher
+├── fiji-launcher         # Downloads/installs Fiji on first run
+├── blender-launcher      # Downloads/installs Blender on first run
 ├── start-filebrowser
-├── start.sh
 ├── .gitattributes
 └── README.md (this file)
 ```
@@ -335,7 +371,26 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 
 ## Version History
 
-> **Branch: without-blender-and-fiji** - This is a lighter version of the image without Blender and Fiji to reduce image size.
+> **Branch: without-blender-and-fiji** - Lite version with lazy-loading architecture for faster Docker builds.
+
+- **v12** - January 2026
+  - **Major architecture change: Lazy-loading for faster Docker builds**
+    - 3D Slicer now downloads on first boot (not during Docker build)
+    - Model weights download on first boot
+    - nnInteractive extension installs on first boot
+    - Reduces Docker image size by ~2GB
+  - **Background installation with progress monitoring**
+    - `install-on-boot.sh` runs automatically when container starts
+    - Progress logged to `/var/log/slicer-install.log`
+    - VNC shows terminal with live progress if install is running
+  - **On-demand installers for optional apps**
+    - Fiji and Blender install when desktop shortcuts are clicked
+    - GPU-accelerated wrapper scripts created automatically
+  - **Key files:**
+    - `install-on-boot.sh` - Background installer script
+    - `fiji-launcher` / `blender-launcher` - On-demand app installers
+    - Modified `start.sh` - Launches background installer
+    - Modified `xstartup` - Shows install progress on VNC connect
 
 - **v11** - January 2026
   - **Fixed GitHub desktop shortcut** - Changed `xfce4-terminal -e` to `xfce4-terminal -x` with full path

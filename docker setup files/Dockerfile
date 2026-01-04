@@ -193,68 +193,11 @@ RUN mkdir -p /root/.local/share/applications && \
     xdg-mime default chrome-root.desktop x-scheme-handler/http x-scheme-handler/https text/html
 
 # ============================================
-# STAGE 5: Download model weights
+# STAGE 5: Create wrapper scripts
 # ============================================
-# The server looks for weights at .nninteractive_weights/nnInteractive_v1.0 relative to cwd
-# We download to /root/.nninteractive_weights so it works when running from /root
-RUN mkdir -p /root/.nninteractive_weights && \
-    /opt/uv-tools/nninteractive-slicer-server/bin/python -c "\
-from huggingface_hub import snapshot_download; \
-snapshot_download('nnInteractive/nnInteractive', \
-    local_dir='/root/.nninteractive_weights/nnInteractive_v1.0', \
-    local_dir_use_symlinks=False)"
-
-# ============================================
-# STAGE 6: Install 3D Slicer 5.10.0
-# ============================================
-# Download from official Slicer website (stable release for Linux)
-# Note: This URL redirects to the latest stable release
-RUN mkdir -p /opt/slicer && \
-    wget -q "https://download.slicer.org/download?os=linux&stability=release" \
-    -O /tmp/slicer.tar.gz && \
-    tar -xzf /tmp/slicer.tar.gz -C /opt/slicer --strip-components=1 && \
-    rm /tmp/slicer.tar.gz
-
-# ============================================
-# STAGE 7: Install NNInteractive Slicer Extension
-# ============================================
-# Download from official GitHub repository: https://github.com/coendevente/SlicerNNInteractive
-RUN mkdir -p /opt/slicer-extensions && \
-    wget -q https://github.com/coendevente/SlicerNNInteractive/archive/refs/heads/main.zip \
-    -O /tmp/nninteractive-ext.zip && \
-    unzip -q /tmp/nninteractive-ext.zip -d /opt/slicer-extensions && \
-    rm /tmp/nninteractive-ext.zip
-
-# ============================================
-# STAGE 8: Install nnInteractive module into Slicer
-# ============================================
-# Copy the module .py file to the scripted modules directory (must be at top level)
-# Also copy the module's Resources (Icons and UI) to Slicer's Resources folder
-RUN cp /opt/slicer-extensions/SlicerNNInteractive-main/slicer_plugin/SlicerNNInteractive/SlicerNNInteractive.py \
-    /opt/slicer/lib/Slicer-5.10/qt-scripted-modules/ && \
-    cp -r /opt/slicer-extensions/SlicerNNInteractive-main/slicer_plugin/SlicerNNInteractive/Resources/Icons/* \
-    /opt/slicer/lib/Slicer-5.10/qt-scripted-modules/Resources/Icons/ && \
-    cp /opt/slicer-extensions/SlicerNNInteractive-main/slicer_plugin/SlicerNNInteractive/Resources/UI/SlicerNNInteractive.ui \
-    /opt/slicer/lib/Slicer-5.10/qt-scripted-modules/Resources/UI/
-
-# ============================================
-# STAGE 9: Create wrapper scripts
-# ============================================
-
-# Slicer launcher with GPU acceleration (falls back to software rendering if VirtualGL unavailable)
-RUN cat > /usr/local/bin/Slicer << 'EOF' && chmod +x /usr/local/bin/Slicer
-#!/bin/bash
-if [ -x /opt/VirtualGL/bin/vglrun ]; then
-    # Use VirtualGL for GPU acceleration
-    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
-    export __GLX_VENDOR_LIBRARY_NAME=nvidia
-    export VGL_DISPLAY=egl
-    exec /opt/VirtualGL/bin/vglrun -d egl /opt/slicer/Slicer "$@"
-else
-    # Fallback: run without VirtualGL
-    exec /opt/slicer/Slicer "$@"
-fi
-EOF
+# NOTE: 3D Slicer, nnInteractive extension, and model weights are installed
+# on first boot via install-on-boot.sh for faster Docker image builds.
+# The Slicer wrapper script is also created by install-on-boot.sh.
 
 # nnInteractive server launcher
 RUN echo '#!/bin/bash\nexec nninteractive-slicer-server "$@"' \
@@ -285,6 +228,8 @@ COPY nninteractive.desktop /root/Desktop/nnInteractive.desktop
 COPY filebrowser.desktop /root/Desktop/FileTransfer.desktop
 COPY chrome.desktop /root/Desktop/Chrome.desktop
 COPY github.desktop /root/Desktop/GitHub.desktop
+COPY fiji.desktop /root/Desktop/Fiji.desktop
+COPY blender.desktop /root/Desktop/Blender.desktop
 RUN chmod +x /root/Desktop/*.desktop
 
 # File Browser launcher script
@@ -294,6 +239,18 @@ RUN chmod +x /usr/local/bin/start-filebrowser
 # GitHub launcher script (handles auth, repo selection, and lazygit)
 COPY github-launcher /usr/local/bin/github-launcher
 RUN chmod +x /usr/local/bin/github-launcher
+
+# Fiji launcher script (installs on first run, then launches with GPU acceleration)
+COPY fiji-launcher /usr/local/bin/fiji-launcher
+RUN chmod +x /usr/local/bin/fiji-launcher
+
+# Blender launcher script (installs on first run, then launches with GPU acceleration)
+COPY blender-launcher /usr/local/bin/blender-launcher
+RUN chmod +x /usr/local/bin/blender-launcher
+
+# Background installer script (downloads Slicer + model weights on first boot)
+COPY install-on-boot.sh /usr/local/bin/install-on-boot.sh
+RUN chmod +x /usr/local/bin/install-on-boot.sh
 
 # Create /GITHUB directory for repositories
 RUN mkdir -p /GITHUB

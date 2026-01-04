@@ -1,4 +1,13 @@
 #!/bin/bash
+#
+# xstartup - VNC session startup script
+#
+# This script runs when a VNC session starts. It:
+# 1. Checks if background installation is still running
+# 2. If running, opens a terminal to show progress
+# 3. Starts the XFCE desktop environment
+#
+
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
@@ -8,7 +17,28 @@ chmod 700 $XDG_RUNTIME_DIR
 
 export PATH="/opt/uv-tools/bin:$PATH"
 
-# Start XFCE desktop
+# Start XFCE desktop first (so terminal appears on desktop)
 startxfce4 &
+
+# Give desktop a moment to start
+sleep 2
+
+# Check if background installation is still running
+DONE_MARKER="/var/run/slicer-install.done"
+LOCK_FILE="/var/run/slicer-install.lock"
+LOG_FILE="/var/log/slicer-install.log"
+
+if [ -f "$LOCK_FILE" ] && [ ! -f "$DONE_MARKER" ]; then
+    # Installation is still running - show progress in terminal
+    xfce4-terminal --title="Installing 3D Slicer..." --geometry=100x30 \
+        -e "bash -c 'echo \"=== 3D Slicer Installation Progress ===\"; echo \"\"; echo \"Installation is running in the background.\"; echo \"This window will show live progress.\"; echo \"\"; echo \"You can close this window - installation will continue.\"; echo \"Desktop shortcuts will work once installation completes.\"; echo \"\"; echo \"--- Live Log ---\"; echo \"\"; tail -f $LOG_FILE'" &
+elif [ ! -f "$DONE_MARKER" ] && [ -f "$LOG_FILE" ]; then
+    # Installation might have just started or there was an issue
+    # Check if log file is recent (within last 60 seconds)
+    if [ $(( $(date +%s) - $(stat -c %Y "$LOG_FILE" 2>/dev/null || echo 0) )) -lt 60 ]; then
+        xfce4-terminal --title="Installing 3D Slicer..." --geometry=100x30 \
+            -e "bash -c 'echo \"=== 3D Slicer Installation Progress ===\"; echo \"\"; tail -f $LOG_FILE'" &
+    fi
+fi
 
 wait
