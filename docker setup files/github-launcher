@@ -2,87 +2,80 @@
 
 GITHUB_DIR="/GITHUB"
 
-# Function to select and clone a repo
-clone_repo() {
-    echo "Fetching your repositories..."
-    repos=$(gh repo list --limit 50 --json nameWithOwner -q '.[].nameWithOwner')
-    
-    if [ -z "$repos" ]; then
-        echo "No repositories found."
-        read -p "Press Enter to exit..."
-        exit 1
-    fi
-    
-    echo ""
-    echo "Your repositories:"
-    echo "=================="
-    i=1
-    while IFS= read -r repo; do
-        echo "$i) $repo"
-        ((i++))
-    done <<< "$repos"
-    echo ""
-    
-    read -p "Enter the number of the repo to clone (or 'q' to quit): " choice
-    
-    if [ "$choice" = "q" ]; then
-        exit 0
-    fi
-    
-    selected=$(echo "$repos" | sed -n "${choice}p")
-    
-    if [ -z "$selected" ]; then
-        echo "Invalid selection."
-        read -p "Press Enter to exit..."
-        exit 1
-    fi
-    
-    echo "Cloning $selected..."
-    mkdir -p "$GITHUB_DIR"
-    cd "$GITHUB_DIR"
-    gh repo clone "$selected"
-    
-    # Get the repo name (last part after /)
-    repo_name=$(basename "$selected")
-    echo "$repo_name" > "$GITHUB_DIR/.current_repo"
-    
-    cd "$GITHUB_DIR/$repo_name"
-    exec lazygit
-}
-
 # Check if logged into GitHub
 if ! gh auth status &>/dev/null; then
     echo "Not logged into GitHub. Starting authentication..."
     gh auth login --web -h github.com
-    
+
     if ! gh auth status &>/dev/null; then
         echo "Authentication failed."
         read -p "Press Enter to exit..."
         exit 1
     fi
     echo "Authentication successful!"
+    echo ""
 fi
 
-# Check if GITHUB_DIR exists and has a repo
-if [ -d "$GITHUB_DIR" ]; then
-    # Look for any git repo in GITHUB_DIR
-    repo_found=""
-    for dir in "$GITHUB_DIR"/*/; do
-        if [ -d "${dir}.git" ]; then
-            repo_found="$dir"
-            break
-        fi
-    done
-    
-    if [ -n "$repo_found" ]; then
-        # Repo exists, open lazygit
-        cd "$repo_found"
+# Ensure GITHUB_DIR exists
+mkdir -p "$GITHUB_DIR"
+
+# Get list of repos
+echo "Fetching your repositories..."
+repos=$(gh repo list --limit 50 --json nameWithOwner -q '.[].nameWithOwner')
+
+if [ -z "$repos" ]; then
+    echo "No repositories found."
+    read -p "Press Enter to exit..."
+    exit 1
+fi
+
+echo ""
+echo "Your repositories:"
+echo "=================="
+i=1
+while IFS= read -r repo; do
+    repo_name=$(basename "$repo")
+    if [ -d "$GITHUB_DIR/$repo_name/.git" ]; then
+        echo "$i) $repo [CLONED]"
+    else
+        echo "$i) $repo"
+    fi
+    ((i++))
+done <<< "$repos"
+echo ""
+
+read -p "Enter the number of the repo to open (or 'q' to quit): " choice
+
+if [ "$choice" = "q" ]; then
+    exit 0
+fi
+
+selected=$(echo "$repos" | sed -n "${choice}p")
+
+if [ -z "$selected" ]; then
+    echo "Invalid selection."
+    read -p "Press Enter to exit..."
+    exit 1
+fi
+
+repo_name=$(basename "$selected")
+
+# Check if already cloned
+if [ -d "$GITHUB_DIR/$repo_name/.git" ]; then
+    echo "Opening $repo_name..."
+    cd "$GITHUB_DIR/$repo_name"
+    exec lazygit
+else
+    echo "Cloning $selected..."
+    cd "$GITHUB_DIR"
+    gh repo clone "$selected"
+
+    if [ -d "$GITHUB_DIR/$repo_name/.git" ]; then
+        cd "$GITHUB_DIR/$repo_name"
         exec lazygit
     else
-        # No repo found, ask to clone
-        clone_repo
+        echo "Clone failed."
+        read -p "Press Enter to exit..."
+        exit 1
     fi
-else
-    # GITHUB_DIR doesn't exist, ask to clone
-    clone_repo
 fi
