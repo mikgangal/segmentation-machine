@@ -354,6 +354,10 @@ RUN chmod +x /usr/local/bin/github-launcher
 # Create /GITHUB directory for repositories
 RUN mkdir -p /GITHUB
 
+# Fix any Windows line endings (CRLF -> LF) in scripts
+# This ensures scripts work even if edited on Windows
+RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup 2>/dev/null || true
+
 # Configure git with noreply email by default
 RUN git config --global user.email "user@users.noreply.github.com" && \
     git config --global user.name "user" && \

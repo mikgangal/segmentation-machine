@@ -1,0 +1,9 @@
+# Force LF line endings for all shell scripts and config files
+# This prevents CRLF issues when building Docker on Windows
+
+*.sh text eol=lf
+*.desktop text eol=lf
+xstartup text eol=lf
+github-launcher text eol=lf
+start-filebrowser text eol=lf
+Dockerfile text eol=lf

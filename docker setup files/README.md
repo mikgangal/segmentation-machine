@@ -354,9 +354,9 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
     - Added xdg-settings/xdg-mime configuration in Dockerfile
     - Created chrome-root.desktop entry for xdg-open compatibility
     - `gh auth login --web` now correctly opens Chrome with `--no-sandbox`
-  - **Note:** Ensure all bash scripts are saved with Unix line endings (LF, not CRLF)
-    - Windows-style line endings cause "cannot execute: required file not found" errors
-    - Fix with: `sed -i 's/\r$//' <script>`
+  - **Fixed Windows line ending issues** when building Docker on Windows
+    - Added `.gitattributes` to force LF line endings for all scripts (prevents Git CRLF conversion)
+    - Added CRLF safeguard in Dockerfile as backup (`sed -i 's/\r$//'` on all scripts)
 
 - **v10** - January 2026
   - **Added GitHub workflow** with desktop shortcut for streamlined Git operations
