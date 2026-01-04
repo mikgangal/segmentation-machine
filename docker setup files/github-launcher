@@ -13,6 +13,14 @@ if ! gh auth status &>/dev/null; then
         exit 1
     fi
     echo "Authentication successful!"
+
+    # Auto-configure git with GitHub username and noreply email
+    username=$(gh api user -q '.login')
+    if [ -n "$username" ]; then
+        git config --global user.name "$username"
+        git config --global user.email "${username}@users.noreply.github.com"
+        echo "Git configured: $username <${username}@users.noreply.github.com>"
+    fi
     echo ""
 fi
 
