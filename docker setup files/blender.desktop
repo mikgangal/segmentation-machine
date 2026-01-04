@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Blender
-Comment=3D modeling, animation, rendering and post-production
-Exec=/usr/local/bin/Blender %f
-Icon=/opt/blender/blender.png
-Terminal=false
-Type=Application
-Categories=Graphics;3DGraphics;
-MimeType=application/x-blender;

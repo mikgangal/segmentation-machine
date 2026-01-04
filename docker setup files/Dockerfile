@@ -193,30 +193,6 @@ RUN mkdir -p /root/.local/share/applications && \
     xdg-mime default chrome-root.desktop x-scheme-handler/http x-scheme-handler/https text/html
 
 # ============================================
-# STAGE 4e: Install Fiji (ImageJ)
-# ============================================
-# Fiji is a "batteries-included" distribution of ImageJ for scientific image analysis
-RUN wget -q "https://downloads.imagej.net/fiji/latest/fiji-latest-linux64-jdk.zip" \
-    -O /tmp/fiji.zip && \
-    unzip -q /tmp/fiji.zip -d /opt && \
-    mv /opt/Fiji /opt/fiji && \
-    chmod +x /opt/fiji/fiji-linux-x64 && \
-    rm /tmp/fiji.zip
-
-# ============================================
-# STAGE 4f: Install Blender
-# ============================================
-# Blender is a free and open-source 3D creation suite
-RUN apt-get update && apt-get install -y --no-install-recommends librsvg2-bin xz-utils && \
-    mkdir -p /opt/blender && \
-    wget -q "https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz" \
-    -O /tmp/blender.tar.xz && \
-    tar -xf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 && \
-    rsvg-convert -w 128 -h 128 /opt/blender/blender.svg -o /opt/blender/blender.png && \
-    rm /tmp/blender.tar.xz && \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================
 # STAGE 5: Download model weights
 # ============================================
 # The server looks for weights at .nninteractive_weights/nnInteractive_v1.0 relative to cwd
@@ -284,36 +260,6 @@ EOF
 RUN echo '#!/bin/bash\nexec nninteractive-slicer-server "$@"' \
     > /usr/local/bin/start-nninteractive && chmod +x /usr/local/bin/start-nninteractive
 
-# Blender launcher with GPU acceleration (falls back to software rendering if VirtualGL unavailable)
-RUN cat > /usr/local/bin/Blender << 'EOF' && chmod +x /usr/local/bin/Blender
-#!/bin/bash
-if [ -x /opt/VirtualGL/bin/vglrun ]; then
-    # Use VirtualGL for GPU acceleration
-    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
-    export __GLX_VENDOR_LIBRARY_NAME=nvidia
-    export VGL_DISPLAY=egl
-    exec /opt/VirtualGL/bin/vglrun -d egl /opt/blender/blender "$@"
-else
-    # Fallback: run without VirtualGL
-    exec /opt/blender/blender "$@"
-fi
-EOF
-
-# Fiji launcher with GPU acceleration (for 3D Viewer plugin)
-RUN cat > /usr/local/bin/Fiji << 'EOF' && chmod +x /usr/local/bin/Fiji
-#!/bin/bash
-if [ -x /opt/VirtualGL/bin/vglrun ]; then
-    # Use VirtualGL for GPU acceleration
-    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
-    export __GLX_VENDOR_LIBRARY_NAME=nvidia
-    export VGL_DISPLAY=egl
-    exec /opt/VirtualGL/bin/vglrun -d egl /opt/fiji/fiji-linux-x64 "$@"
-else
-    # Fallback: run without VirtualGL
-    exec /opt/fiji/fiji-linux-x64 "$@"
-fi
-EOF
-
 # ============================================
 # STAGE 10: VNC and desktop configuration
 # ============================================
@@ -338,8 +284,6 @@ COPY slicer.desktop /root/Desktop/Slicer.desktop
 COPY nninteractive.desktop /root/Desktop/nnInteractive.desktop
 COPY filebrowser.desktop /root/Desktop/FileTransfer.desktop
 COPY chrome.desktop /root/Desktop/Chrome.desktop
-COPY fiji.desktop /root/Desktop/Fiji.desktop
-COPY blender.desktop /root/Desktop/Blender.desktop
 COPY github.desktop /root/Desktop/GitHub.desktop
 RUN chmod +x /root/Desktop/*.desktop
 

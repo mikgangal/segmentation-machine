@@ -1,4 +1,6 @@
-# 3D Slicer + nnInteractive Docker Image for RunPod
+# 3D Slicer + nnInteractive Docker Image for RunPod (Lite)
+
+> **Note:** This is the **lite version** without Blender and Fiji. For the full version, see the `main` branch.
 
 This folder contains everything needed to build a Docker image for running 3D Slicer with the nnInteractive AI segmentation extension on RunPod (or any GPU machine).
 
@@ -14,8 +16,6 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **File Transfer** - Web-based file manager for uploads/downloads
 - **Google Chrome** - Default web browser
 - **GitHub CLI + lazygit** - Git workflow with visual terminal UI
-- **Fiji (ImageJ)** - Scientific image analysis platform
-- **Blender 5.0.1** - 3D modeling, animation, and rendering
 
 ## Prerequisites
 
@@ -42,12 +42,11 @@ docker-build/
 ├── nninteractive.desktop
 ├── filebrowser.desktop
 ├── chrome.desktop
-├── fiji.desktop
-├── blender.desktop
 ├── github.desktop
 ├── github-launcher
 ├── start-filebrowser
 ├── start.sh
+├── .gitattributes
 └── README.md (this file)
 ```
 
@@ -227,20 +226,14 @@ Then verify with:
 The output should include your GPU's architecture (e.g., `sm_120` for Blackwell).
 
 ### GPU-accelerated applications not using GPU
-3D Slicer, Blender, and Fiji all use VirtualGL with NVIDIA EGL for GPU-accelerated OpenGL rendering. Each has a wrapper script that sets the required environment variables:
+3D Slicer uses VirtualGL with NVIDIA EGL for GPU-accelerated OpenGL rendering via the wrapper script at `/usr/local/bin/Slicer`.
 
-| Application | Wrapper Script |
-|-------------|----------------|
-| 3D Slicer | `/usr/local/bin/Slicer` |
-| Blender | `/usr/local/bin/Blender` |
-| Fiji (ImageJ) | `/usr/local/bin/Fiji` |
-
-The wrapper scripts configure:
+The wrapper script configures:
 - `__EGL_VENDOR_LIBRARY_FILENAMES` - Points to NVIDIA EGL
 - `__GLX_VENDOR_LIBRARY_NAME` - Forces NVIDIA GLX
 - `VGL_DISPLAY` - Uses EGL display
 
-To verify GPU usage, run `nvtop` while any of these apps is running - you should see GPU activity.
+To verify GPU usage, run `nvtop` while Slicer is running - you should see GPU activity.
 
 ## Customization
 
@@ -278,8 +271,6 @@ VNC_RESOLUTION=2560x1440
 | File Transfer | Latest (filebrowser.org) |
 | Claude Code | Latest (@anthropic-ai/claude-code) |
 | Google Chrome | Latest stable (default browser) |
-| Fiji (ImageJ) | Latest (with bundled JDK) |
-| Blender | 5.0.1 |
 
 ## GPU Compatibility
 
@@ -341,10 +332,10 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 - [VirtualGL](https://virtualgl.org/) - GPU acceleration for remote 3D apps
 - [File Browser](https://filebrowser.org/) - Web-based file manager
 - [Claude Code](https://github.com/anthropics/claude-code) - AI coding assistant by Anthropic
-- [Fiji (ImageJ)](https://fiji.sc/) - Scientific image analysis platform
-- [Blender](https://www.blender.org/) - 3D creation suite
 
 ## Version History
+
+> **Branch: without-blender-and-fiji** - This is a lighter version of the image without Blender and Fiji to reduce image size.
 
 - **v11** - January 2026
   - **Fixed GitHub desktop shortcut** - Changed `xfce4-terminal -e` to `xfce4-terminal -x` with full path
@@ -370,9 +361,8 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
   - Fixed Chrome default browser to use `--no-sandbox` for Docker compatibility
 
 - **v9** - January 2026
-  - **Added GPU acceleration for Blender and Fiji** via VirtualGL wrapper scripts
-  - All 3D applications (Slicer, Blender, Fiji) now use consistent VirtualGL configuration
-  - Wrapper scripts at `/usr/local/bin/{Slicer,Blender,Fiji}` with EGL mode
+  - Improved VirtualGL configuration for 3D Slicer
+  - Wrapper script at `/usr/local/bin/Slicer` with EGL mode
 
 - **v8** - January 2026
   - **Replaced TigerVNC with TurboVNC** for optimized 3D visualization performance
@@ -402,9 +392,7 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
   - Verified working on NVIDIA RTX PRO 6000 Blackwell Server Edition
 
 - **v4** - January 2026
-  - Added Fiji (ImageJ) - Scientific image analysis platform with bundled JDK
-  - Added Blender 5.0.1 - 3D modeling, animation, and rendering
-  - Desktop shortcuts for both applications
+  - Internal improvements
 
 - **v3** - January 2026
   - Fixed VNC password creation using `vncpasswd -f` flag for non-interactive stdin input
