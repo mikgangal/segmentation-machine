@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Configuration
+PORT=8080
+ROOT="/"
+DB="/tmp/filebrowser-$$.db"
+
+# Fixed credentials
+USER="admin"
+PASS="runpod"
+
+# Get access URL
+if [ -n "$RUNPOD_POD_ID" ]; then
+    URL="https://${RUNPOD_POD_ID}-${PORT}.proxy.runpod.net"
+elif [ -n "$RUNPOD_PUBLIC_IP" ]; then
+    URL="http://${RUNPOD_PUBLIC_IP}:${PORT}"
+else
+    IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+    URL="http://${IP}:${PORT}"
+fi
+
+# Setup filebrowser
+filebrowser config init -d "$DB" > /dev/null 2>&1
+filebrowser config set -d "$DB" -a 0.0.0.0 -p "$PORT" -r "$ROOT" --minimumPasswordLength 4 > /dev/null 2>&1
+filebrowser users add "$USER" "$PASS" -d "$DB" --perm.admin > /dev/null 2>&1
+
+# Display info
+echo "============================================================"
+echo "  FILE TRANSFER"
+echo "============================================================"
+echo ""
+echo "  URL:      $URL"
+echo ""
+echo "  Username: $USER"
+echo "  Password: $PASS"
+echo ""
+echo "============================================================"
+echo ""
+echo "Press Ctrl+C to stop."
+echo ""
+
+# Cleanup on exit
+trap "rm -f $DB" EXIT
+
+# Start filebrowser
+filebrowser -d "$DB"

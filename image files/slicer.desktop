@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=3D Slicer
+Comment=Medical image visualization (GPU accelerated)
+Exec=/usr/local/bin/Slicer
+Icon=/opt/slicer/bin/Slicer-SplashScreen.png
+Terminal=false
+Type=Application
+Categories=Graphics;Science;Medical;

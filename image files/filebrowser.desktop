@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=File Transfer
+Comment=Web-based file manager for uploading and downloading files
+Exec=xfce4-terminal --hold --title="File Transfer" -e "start-filebrowser"
+Icon=system-file-manager
+Terminal=false
+Categories=Network;FileTransfer;

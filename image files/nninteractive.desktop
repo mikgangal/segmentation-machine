@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=nnInteractive Server
+Comment=Start nnInteractive for AI-assisted segmentation
+Exec=xfce4-terminal -e "bash -c 'nninteractive-slicer-server --host 0.0.0.0 --port 8000; read -p Press_Enter_to_close'"
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Science;Medical;
