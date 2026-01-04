@@ -127,11 +127,30 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm /tmp/chrome.deb && \
     rm -rf /var/lib/apt/lists/*
 
-# Set Chrome as default browser
-RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/google-chrome-stable 200 && \
-    update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/google-chrome-stable 200 && \
-    mkdir -p /root/.config/xfce4 && \
-    echo 'WebBrowser=google-chrome-stable' >> /root/.config/xfce4/helpers.rc
+# Set Chrome as default browser (with --no-sandbox for Docker/root)
+# Create wrapper script
+RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox "$@"' \
+    > /usr/local/bin/chrome-browser && chmod +x /usr/local/bin/chrome-browser
+
+# Set as system default
+RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/local/bin/chrome-browser 300 && \
+    update-alternatives --set x-www-browser /usr/local/bin/chrome-browser
+
+# Configure XFCE to use Chrome with --no-sandbox
+RUN mkdir -p /root/.config/xfce4 /root/.local/share/xfce4/helpers && \
+    echo 'WebBrowser=custom-WebBrowser' > /root/.config/xfce4/helpers.rc && \
+    cat > /root/.local/share/xfce4/helpers/custom-WebBrowser.desktop << 'EOF'
+[Desktop Entry]
+NoDisplay=true
+Version=1.0
+Encoding=UTF-8
+Type=X-XFCE-Helper
+X-XFCE-Category=WebBrowser
+X-XFCE-CommandsWithParameter=/usr/bin/google-chrome-stable --no-sandbox "%s"
+X-XFCE-Commands=/usr/bin/google-chrome-stable --no-sandbox
+Name=Chrome
+Icon=google-chrome
+EOF
 
 # ============================================
 # STAGE 4e: Install Fiji (ImageJ)
