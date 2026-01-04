@@ -173,6 +173,25 @@ Name=Chrome
 Icon=google-chrome
 EOF
 
+# Create desktop entry for xdg-settings default browser (used by gh auth and other CLI tools)
+RUN cat > /usr/share/applications/chrome-root.desktop << 'EOF'
+[Desktop Entry]
+Version=1.0
+Name=Google Chrome (Root)
+GenericName=Web Browser
+Exec=/usr/local/bin/chrome-browser %U
+Terminal=false
+Icon=google-chrome
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+EOF
+
+# Set Chrome as default for xdg-open (used by gh auth login --web)
+RUN mkdir -p /root/.local/share/applications && \
+    xdg-settings set default-web-browser chrome-root.desktop && \
+    xdg-mime default chrome-root.desktop x-scheme-handler/http x-scheme-handler/https text/html
+
 # ============================================
 # STAGE 4e: Install Fiji (ImageJ)
 # ============================================

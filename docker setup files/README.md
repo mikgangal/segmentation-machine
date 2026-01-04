@@ -346,6 +346,18 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 
 ## Version History
 
+- **v11** - January 2026
+  - **Fixed GitHub desktop shortcut** - Changed `xfce4-terminal -e` to `xfce4-terminal -x` with full path
+    - The `-e` flag is deprecated in newer xfce4-terminal versions
+    - Now uses: `Exec=xfce4-terminal -x /usr/local/bin/github-launcher`
+  - **Fixed Chrome default browser for CLI tools** (gh auth, xdg-open)
+    - Added xdg-settings/xdg-mime configuration in Dockerfile
+    - Created chrome-root.desktop entry for xdg-open compatibility
+    - `gh auth login --web` now correctly opens Chrome with `--no-sandbox`
+  - **Note:** Ensure all bash scripts are saved with Unix line endings (LF, not CRLF)
+    - Windows-style line endings cause "cannot execute: required file not found" errors
+    - Fix with: `sed -i 's/\r$//' <script>`
+
 - **v10** - January 2026
   - **Added GitHub workflow** with desktop shortcut for streamlined Git operations
   - Installed GitHub CLI (`gh`) for authentication and repo management
