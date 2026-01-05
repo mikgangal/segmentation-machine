@@ -175,7 +175,7 @@ RUN for i in 1 2 3; do \
 # ============================================
 # Ubuntu 24.04 only has Firefox as a snap which doesn't work in Docker
 # Download directly from Mozilla instead
-RUN apt-get update && apt-get install -y bzip2 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y bzip2 xz-utils && rm -rf /var/lib/apt/lists/*
 RUN for i in 1 2 3; do \
         echo "Attempt $i: Installing Firefox..." && \
         curl -fsSL "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" -o /tmp/firefox.tar.xz && \
