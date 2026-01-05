@@ -141,8 +141,17 @@ TurboVNC is optimized for VirtualGL and provides the best performance for 3D app
 - **Username:** `admin`
 - **Password:** `runpod`
 - **Root:** `/` (full filesystem access)
-- Start from desktop icon "File Transfer" or run: `start-filebrowser`
-- Access via: `https://{pod_id}-8080.proxy.runpod.net`
+- Start from desktop icon "File Transfer" in Tools folder or run: `start-filebrowser`
+
+**What happens when you launch:**
+1. Creates `/FILE TRANSFERS` folder (first run only)
+2. Opens Thunar file manager in that folder (top-right of screen)
+3. Shows terminal with URL and credentials (bottom-right of screen)
+4. Browser URL points directly to FILE TRANSFERS folder
+
+**Access:** `https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/`
+
+You can navigate to any folder from the browser interface, but FILE TRANSFERS is the default landing page for easy file uploads/downloads.
 
 ### Claude Code CLI
 - Run from terminal: `claude`
@@ -373,6 +382,11 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
     - Main desktop now shows only: 3D Slicer, nnInteractive, Tools folder
   - **Added nvtop desktop shortcut** - GPU monitoring accessible from Tools folder
   - **Added Claude Code desktop shortcut** - Launch AI coding assistant from Tools folder
+  - **Improved File Transfer workflow**:
+    - Auto-creates `/FILE TRANSFERS` folder on first run
+    - Opens Thunar file manager in transfer folder
+    - Positions windows on right half of screen (Thunar top, terminal bottom)
+    - Browser URL points directly to FILE TRANSFERS folder
 
 - **v11** - January 2026
   - **Fixed GitHub desktop shortcut** - Changed `xfce4-terminal -e` to `xfce4-terminal -x` with full path
