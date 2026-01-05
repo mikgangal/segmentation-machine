@@ -4,19 +4,50 @@
 PORT=8080
 ROOT="/"
 DB="/tmp/filebrowser-$$.db"
+TRANSFER_DIR="/FILE TRANSFERS"
 
 # Fixed credentials
 USER="admin"
 PASS="runpod"
 
-# Get access URL
+# Create FILE TRANSFERS folder if it doesn't exist
+if [ ! -d "$TRANSFER_DIR" ]; then
+    mkdir -p "$TRANSFER_DIR"
+    echo "Created $TRANSFER_DIR folder"
+fi
+
+# Get screen dimensions
+SCREEN_WIDTH=$(xdotool getdisplaygeometry | awk '{print $1}')
+SCREEN_HEIGHT=$(xdotool getdisplaygeometry | awk '{print $2}')
+
+# Calculate window positions (right half of screen, stacked vertically)
+WIN_WIDTH=$((SCREEN_WIDTH / 2))
+WIN_HEIGHT=$((SCREEN_HEIGHT / 2))
+WIN_X=$((SCREEN_WIDTH / 2))
+
+# Open thunar in the FILE TRANSFERS folder (top-right)
+thunar "$TRANSFER_DIR" &
+sleep 0.5
+THUNAR_WIN=$(wmctrl -l | grep -i "file transfers\|thunar" | tail -1 | awk '{print $1}')
+if [ -n "$THUNAR_WIN" ]; then
+    wmctrl -i -r "$THUNAR_WIN" -e 0,$WIN_X,0,$WIN_WIDTH,$WIN_HEIGHT
+fi
+
+# Position terminal window (bottom-right)
+sleep 0.3
+TERM_WIN=$(wmctrl -l | grep -i "terminal\|xfce4-terminal" | tail -1 | awk '{print $1}')
+if [ -n "$TERM_WIN" ]; then
+    wmctrl -i -r "$TERM_WIN" -e 0,$WIN_X,$WIN_HEIGHT,$WIN_WIDTH,$WIN_HEIGHT
+fi
+
+# Get access URL (pointing to FILE TRANSFERS folder)
 if [ -n "$RUNPOD_POD_ID" ]; then
-    URL="https://${RUNPOD_POD_ID}-${PORT}.proxy.runpod.net"
+    URL="https://${RUNPOD_POD_ID}-${PORT}.proxy.runpod.net/files/FILE%20TRANSFERS/"
 elif [ -n "$RUNPOD_PUBLIC_IP" ]; then
-    URL="http://${RUNPOD_PUBLIC_IP}:${PORT}"
+    URL="http://${RUNPOD_PUBLIC_IP}:${PORT}/files/FILE%20TRANSFERS/"
 else
     IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-    URL="http://${IP}:${PORT}"
+    URL="http://${IP}:${PORT}/files/FILE%20TRANSFERS/"
 fi
 
 # Setup filebrowser

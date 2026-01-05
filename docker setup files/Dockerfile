@@ -36,6 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 libpcre2-16-0 \
     # GPU monitoring
     nvtop \
+    # Window management for scripts
+    wmctrl xdotool \
     # SSH server (optional but useful)
     openssh-server \
     # noVNC for browser-based VNC access
