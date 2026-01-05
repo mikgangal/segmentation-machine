@@ -12,8 +12,9 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **Pre-downloaded Model Weights** - Works immediately, no downloads on startup
 - **Claude Code CLI** - AI coding assistant from Anthropic
 - **File Transfer** - Web-based file manager for uploads/downloads
-- **Google Chrome** - Default web browser
+- **Firefox** - Default web browser (pre-configured, no setup prompts)
 - **GitHub CLI + lazygit** - Git workflow with visual terminal UI
+- **nvtop** - GPU monitoring tool
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
 
@@ -38,16 +39,19 @@ Download all files in this folder to your laptop. You should have:
 docker-build/
 ├── Dockerfile
 ├── xstartup
-├── slicer.desktop
-├── nninteractive.desktop
-├── filebrowser.desktop
-├── chrome.desktop
-├── fiji.desktop
-├── blender.desktop
-├── github.desktop
-├── github-launcher
-├── start-filebrowser
 ├── start.sh
+├── start-filebrowser
+├── github-launcher
+├── firefox-policies.json
+├── slicer.desktop          # Main desktop
+├── nninteractive.desktop   # Main desktop
+├── firefox.desktop         # Tools folder
+├── github.desktop          # Tools folder
+├── fiji.desktop            # Tools folder
+├── blender.desktop         # Tools folder
+├── filebrowser.desktop     # Tools folder
+├── nvtop.desktop           # Tools folder
+├── claude.desktop          # Tools folder
 └── README.md (this file)
 ```
 
@@ -276,8 +280,9 @@ VNC_RESOLUTION=2560x1440
 | Desktop | XFCE4 |
 | GPU Acceleration | VirtualGL 3.1.4 (EGL mode) |
 | File Transfer | Latest (filebrowser.org) |
+| Node.js | 22.x (via NodeSource) |
 | Claude Code | Latest (@anthropic-ai/claude-code) |
-| Google Chrome | Latest stable (default browser) |
+| Firefox | Latest (direct from Mozilla, pre-configured) |
 | Fiji (ImageJ) | Latest (with bundled JDK) |
 | Blender | 5.0.1 |
 
@@ -345,6 +350,29 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 - [Blender](https://www.blender.org/) - 3D creation suite
 
 ## Version History
+
+- **v12** - January 2026
+  - **Replaced Chrome with Firefox** - Chrome had persistent issues with sandbox flags and default browser detection in Docker
+    - Firefox installed directly from Mozilla (Ubuntu 24.04 only has snap version which doesn't work in Docker)
+    - Added `firefox-policies.json` to skip all first-run setup screens (welcome page, telemetry, etc.)
+    - Firefox automatically set as system default browser via xdg-settings
+  - **Fixed Node.js for Claude Code** - Ubuntu's default Node.js 18.19.1 had ES module issues
+    - Now installs Node.js 22.x via NodeSource for proper ES module support
+    - Fixes `SyntaxError: Cannot use import statement outside a module` error
+  - **Fixed lazygit and filebrowser crashes** - Binaries were corrupted during Windows Docker build
+    - Both now download fresh from official sources during build
+  - **Added installation verification with retry logic** - Automatically retries up to 3 times if install fails
+    - File Browser: 3 retries + fallback to direct GitHub download
+    - lazygit: 3 retries with cleanup between attempts
+    - Firefox: 3 retries with cleanup between attempts
+    - All tools verify with version check after install
+  - **Desktop reorganization** for cleaner workflow:
+    - Hidden default icons: home, filesystem, trash, removable devices
+    - Created "Tools" folder on desktop containing:
+      - Firefox, GitHub, Fiji, Blender, FileTransfer, nvtop, Claude Code
+    - Main desktop now shows only: 3D Slicer, nnInteractive, Tools folder
+  - **Added nvtop desktop shortcut** - GPU monitoring accessible from Tools folder
+  - **Added Claude Code desktop shortcut** - Launch AI coding assistant from Tools folder
 
 - **v11** - January 2026
   - **Fixed GitHub desktop shortcut** - Changed `xfce4-terminal -e` to `xfce4-terminal -x` with full path

@@ -38,8 +38,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nvtop \
     # SSH server (optional but useful)
     openssh-server \
-    # Node.js and npm for Claude Code
-    nodejs npm \
     # noVNC for browser-based VNC access
     novnc websockify \
     && rm -rf /var/lib/apt/lists/*
@@ -108,14 +106,40 @@ RUN uv pip install \
 ENV PATH="/opt/uv-tools/bin:$PATH"
 
 # ============================================
-# STAGE 4b: Install Claude Code CLI
+# STAGE 4b: Install Node.js 22 and Claude Code CLI
 # ============================================
-RUN npm install -g @anthropic-ai/claude-code
+# Ubuntu's default nodejs (v18) has ES module issues with Claude Code
+# Install Node.js 22 from NodeSource for proper ES module support
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    node --version && \
+    echo "Node.js installation verified"
+
+RUN npm install -g @anthropic-ai/claude-code && \
+    claude --version && \
+    echo "Claude Code installation verified"
 
 # ============================================
-# STAGE 4c: Install File Browser
+# STAGE 4c: Install File Browser (with retry and fallback)
 # ============================================
-RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing File Browser..." && \
+        curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash && \
+        filebrowser version && \
+        echo "File Browser installation verified" && \
+        break || \
+        { echo "Attempt $i failed, retrying..."; sleep 2; }; \
+    done && \
+    filebrowser version || \
+    { echo "Primary install failed, trying direct download..." && \
+      FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*') && \
+      curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz && \
+      tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser && \
+      rm /tmp/fb.tar.gz && \
+      chmod +x /usr/local/bin/filebrowser && \
+      filebrowser version && \
+      echo "File Browser installed via fallback"; }
 
 # ============================================
 # STAGE 4c2: Install GitHub CLI
@@ -129,68 +153,42 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================
-# STAGE 4c3: Install lazygit
+# STAGE 4c3: Install lazygit (with retry)
 # ============================================
-RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') && \
-    curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
-    tar xf /tmp/lazygit.tar.gz -C /tmp lazygit && \
-    install /tmp/lazygit /usr/local/bin && \
-    rm /tmp/lazygit.tar.gz /tmp/lazygit
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing lazygit..." && \
+        LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') && \
+        curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
+        tar xf /tmp/lazygit.tar.gz -C /tmp lazygit && \
+        install /tmp/lazygit /usr/local/bin && \
+        rm -f /tmp/lazygit.tar.gz /tmp/lazygit && \
+        lazygit --version && \
+        echo "lazygit installation verified" && \
+        break || \
+        { echo "Attempt $i failed, cleaning up and retrying..."; rm -f /tmp/lazygit.tar.gz /tmp/lazygit /usr/local/bin/lazygit; sleep 2; }; \
+    done && lazygit --version
 
 # ============================================
-# STAGE 4d: Install Google Chrome and set as default browser
+# STAGE 4d: Install Firefox (direct from Mozilla, not snap, with retry)
 # ============================================
-RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    -O /tmp/chrome.deb && \
-    apt-get update && \
-    apt-get install -y /tmp/chrome.deb && \
-    rm /tmp/chrome.deb && \
-    rm -rf /var/lib/apt/lists/*
+# Ubuntu 24.04 only has Firefox as a snap which doesn't work in Docker
+# Download directly from Mozilla instead
+RUN apt-get update && apt-get install -y bzip2 && rm -rf /var/lib/apt/lists/*
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing Firefox..." && \
+        curl -fsSL "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US" -o /tmp/firefox.tar.xz && \
+        tar -xJf /tmp/firefox.tar.xz -C /opt && \
+        rm -f /tmp/firefox.tar.xz && \
+        ln -sf /opt/firefox/firefox /usr/local/bin/firefox && \
+        mkdir -p /opt/firefox/distribution && \
+        firefox --version && \
+        echo "Firefox installation verified" && \
+        break || \
+        { echo "Attempt $i failed, cleaning up and retrying..."; rm -rf /tmp/firefox.tar.xz /opt/firefox; sleep 2; }; \
+    done && firefox --version
 
-# Set Chrome as default browser (with Docker-compatible flags)
-# Flags: --no-sandbox (required for root), --test-type (hides sandbox warning),
-#        --no-default-browser-check, --disable-infobars (hide other warnings)
-RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type "$@"' \
-    > /usr/local/bin/chrome-browser && chmod +x /usr/local/bin/chrome-browser
-
-# Set as system default
-RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/local/bin/chrome-browser 300 && \
-    update-alternatives --set x-www-browser /usr/local/bin/chrome-browser
-
-# Configure XFCE to use Chrome with Docker-compatible flags
-RUN mkdir -p /root/.config/xfce4 /root/.local/share/xfce4/helpers && \
-    echo 'WebBrowser=custom-WebBrowser' > /root/.config/xfce4/helpers.rc && \
-    cat > /root/.local/share/xfce4/helpers/custom-WebBrowser.desktop << 'EOF'
-[Desktop Entry]
-NoDisplay=true
-Version=1.0
-Encoding=UTF-8
-Type=X-XFCE-Helper
-X-XFCE-Category=WebBrowser
-X-XFCE-CommandsWithParameter=/usr/bin/google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type "%s"
-X-XFCE-Commands=/usr/bin/google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type
-Name=Chrome
-Icon=google-chrome
-EOF
-
-# Create desktop entry for xdg-settings default browser (used by gh auth and other CLI tools)
-RUN cat > /usr/share/applications/chrome-root.desktop << 'EOF'
-[Desktop Entry]
-Version=1.0
-Name=Google Chrome (Root)
-GenericName=Web Browser
-Exec=/usr/local/bin/chrome-browser %U
-Terminal=false
-Icon=google-chrome
-Type=Application
-Categories=Network;WebBrowser;
-MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
-EOF
-
-# Set Chrome as default for xdg-open (used by gh auth login --web)
-RUN mkdir -p /root/.local/share/applications && \
-    xdg-settings set default-web-browser chrome-root.desktop && \
-    xdg-mime default chrome-root.desktop x-scheme-handler/http x-scheme-handler/https text/html
+# Skip Firefox first-run setup screens
+COPY firefox-policies.json /opt/firefox/distribution/policies.json
 
 # ============================================
 # STAGE 4e: Install Fiji (ImageJ)
@@ -331,17 +329,39 @@ RUN echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=v
 COPY xstartup /root/.vnc/xstartup
 RUN chmod +x /root/.vnc/xstartup
 
-# Desktop shortcuts
-RUN mkdir -p /root/Desktop
+# Desktop shortcuts - Main apps on desktop, tools in Tools folder
+RUN mkdir -p /root/Desktop/Tools
 
+# Main workflow apps on desktop
 COPY slicer.desktop /root/Desktop/Slicer.desktop
 COPY nninteractive.desktop /root/Desktop/nnInteractive.desktop
-COPY filebrowser.desktop /root/Desktop/FileTransfer.desktop
-COPY chrome.desktop /root/Desktop/Chrome.desktop
-COPY fiji.desktop /root/Desktop/Fiji.desktop
-COPY blender.desktop /root/Desktop/Blender.desktop
-COPY github.desktop /root/Desktop/GitHub.desktop
-RUN chmod +x /root/Desktop/*.desktop
+
+# Tools folder
+COPY firefox.desktop /root/Desktop/Tools/Firefox.desktop
+COPY github.desktop /root/Desktop/Tools/GitHub.desktop
+COPY fiji.desktop /root/Desktop/Tools/Fiji.desktop
+COPY blender.desktop /root/Desktop/Tools/Blender.desktop
+COPY filebrowser.desktop /root/Desktop/Tools/FileTransfer.desktop
+COPY nvtop.desktop /root/Desktop/Tools/nvtop.desktop
+COPY claude.desktop /root/Desktop/Tools/Claude.desktop
+
+RUN chmod +x /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop
+
+# Hide default desktop icons (home, filesystem, trash)
+RUN mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    cat > /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="desktop-icons" type="empty">
+    <property name="file-icons" type="empty">
+      <property name="show-home" type="bool" value="false"/>
+      <property name="show-filesystem" type="bool" value="false"/>
+      <property name="show-trash" type="bool" value="false"/>
+      <property name="show-removable" type="bool" value="false"/>
+    </property>
+  </property>
+</channel>
+EOF
 
 # File Browser launcher script
 COPY start-filebrowser /usr/local/bin/start-filebrowser

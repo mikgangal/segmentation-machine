@@ -1,9 +1,0 @@
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Chrome
-Comment=Web Browser
-Exec=google-chrome-stable --no-sandbox --no-default-browser-check --disable-infobars --test-type %U
-Icon=google-chrome
-Terminal=false
-Categories=Network;WebBrowser;
