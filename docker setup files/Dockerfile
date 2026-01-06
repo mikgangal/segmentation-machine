@@ -421,6 +421,8 @@ RUN mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml && \
 EOF
 
 # File Browser launcher script
+# NOTE: This script has self-healing - if filebrowser binary is corrupted (Windows Docker build issue),
+# it automatically downloads a fresh copy at runtime before starting the server.
 COPY start-filebrowser /usr/local/bin/start-filebrowser
 RUN chmod +x /usr/local/bin/start-filebrowser
 

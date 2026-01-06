@@ -2,6 +2,55 @@
 
 GITHUB_DIR="/GITHUB"
 
+# ============================================
+# Self-healing: Fix corrupted lazygit binary
+# (Windows Docker builds can corrupt binaries)
+# ============================================
+check_and_fix_lazygit() {
+    # Test if lazygit works
+    if lazygit --version > /dev/null 2>&1; then
+        return 0  # Binary works fine
+    fi
+
+    echo "lazygit binary corrupted (Windows Docker build issue)"
+    echo "Downloading fresh copy..."
+
+    # Get latest version
+    LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
+    if [ -z "$LAZYGIT_VERSION" ]; then
+        echo "ERROR: Could not fetch lazygit version"
+        return 1
+    fi
+
+    # Download and install
+    curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Download failed"
+        return 1
+    fi
+
+    # Extract and install (overwrites corrupted binary)
+    tar xf /tmp/lazygit.tar.gz -C /tmp lazygit
+    install /tmp/lazygit /usr/local/bin
+    rm -f /tmp/lazygit.tar.gz /tmp/lazygit
+
+    # Verify fix
+    if lazygit --version > /dev/null 2>&1; then
+        echo "lazygit v${LAZYGIT_VERSION} installed successfully"
+        return 0
+    else
+        echo "ERROR: lazygit still not working after reinstall"
+        return 1
+    fi
+}
+
+# Run self-healing check
+check_and_fix_lazygit || {
+    echo "Failed to fix lazygit. Press Enter to exit..."
+    read
+    exit 1
+}
+
 # Check if logged into GitHub
 if ! gh auth status &>/dev/null; then
     echo "Not logged into GitHub. Starting authentication..."

@@ -144,10 +144,11 @@ TurboVNC is optimized for VirtualGL and provides the best performance for 3D app
 - Start from desktop icon "File Transfer" in Tools folder or run: `start-filebrowser`
 
 **What happens when you launch:**
-1. Creates `/FILE TRANSFERS` folder (first run only)
-2. Opens Thunar file manager in that folder (top-right of screen)
-3. Shows terminal with URL and credentials (bottom-right of screen)
-4. Browser URL points directly to FILE TRANSFERS folder
+1. **Self-healing check** - Detects and fixes corrupted filebrowser binary (Windows Docker build issue)
+2. Creates `/FILE TRANSFERS` folder (first run only)
+3. Opens Thunar file manager in that folder (top-right of screen)
+4. Shows terminal with URL and credentials (bottom-right of screen)
+5. Browser URL points directly to FILE TRANSFERS folder
 
 **Access:** `https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/`
 
@@ -365,23 +366,26 @@ When building this Docker image on Windows (Docker Desktop), several issues can 
 3. **Direct downloads** - Avoid `curl \| bash` patterns (unreliable on Windows)
 4. **Final verification** - Build verifies all binaries work before completing
 5. **CRLF cleanup** - `sed` removes any remaining Windows line endings
+6. **Runtime self-healing** - `start-filebrowser` detects corrupted binary and auto-downloads fresh copy
 
 ### If Binaries Are Corrupted at Runtime
 
-If you see `Trace/breakpoint trap (core dumped)` errors when running tools like `filebrowser`, `lazygit`, etc., the binary was corrupted during build. To fix:
+If you see `Trace/breakpoint trap (core dumped)` errors when running tools, the binary was corrupted during build.
+
+**File Browser:** Has automatic self-healing. Just run `start-filebrowser` - it detects the corrupted binary and downloads a fresh copy automatically.
+
+**Other tools (lazygit, etc.):** Manually reinstall:
 
 ```bash
-# Example: Reinstall filebrowser
-rm -f /usr/local/bin/filebrowser
-FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*')
-curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz
-tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser
-rm /tmp/fb.tar.gz
-chmod +x /usr/local/bin/filebrowser
-filebrowser version  # Verify it works
+# Example: Reinstall lazygit
+rm -f /usr/local/bin/lazygit
+LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
+curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
+tar xf /tmp/lazygit.tar.gz -C /tmp lazygit
+install /tmp/lazygit /usr/local/bin
+rm -f /tmp/lazygit.tar.gz /tmp/lazygit
+lazygit --version  # Verify it works
 ```
-
-Similar commands work for `lazygit` and other tools.
 
 ### Recommended: Build on Linux
 

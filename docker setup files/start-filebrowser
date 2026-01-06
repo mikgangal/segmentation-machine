@@ -10,6 +10,51 @@ TRANSFER_DIR="/FILE TRANSFERS"
 USER="admin"
 PASS="runpod"
 
+# ============================================
+# Self-healing: Fix corrupted filebrowser binary
+# (Windows Docker builds can corrupt binaries)
+# ============================================
+check_and_fix_filebrowser() {
+    # Test if filebrowser works
+    if filebrowser version > /dev/null 2>&1; then
+        return 0  # Binary works fine
+    fi
+
+    echo "Filebrowser binary corrupted (Windows Docker build issue)"
+    echo "Downloading fresh copy..."
+
+    # Get latest version
+    FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*')
+    if [ -z "$FB_VERSION" ]; then
+        echo "ERROR: Could not fetch filebrowser version"
+        return 1
+    fi
+
+    # Download and install
+    curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Download failed"
+        return 1
+    fi
+
+    # Extract to /usr/local/bin (overwrites corrupted binary)
+    tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser
+    chmod +x /usr/local/bin/filebrowser
+    rm -f /tmp/fb.tar.gz
+
+    # Verify fix
+    if filebrowser version > /dev/null 2>&1; then
+        echo "Filebrowser v${FB_VERSION} installed successfully"
+        return 0
+    else
+        echo "ERROR: Filebrowser still not working after reinstall"
+        return 1
+    fi
+}
+
+# Run self-healing check
+check_and_fix_filebrowser || exit 1
+
 # Create FILE TRANSFERS folder if it doesn't exist
 if [ ! -d "$TRANSFER_DIR" ]; then
     mkdir -p "$TRANSFER_DIR"
