@@ -7,3 +7,4 @@ Exec=/opt/firefox/firefox %U
 Icon=/opt/firefox/browser/chrome/icons/default/default128.png
 Terminal=false
 Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;

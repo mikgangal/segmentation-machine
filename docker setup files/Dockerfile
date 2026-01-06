@@ -45,18 +45,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================
-# STAGE 2: Install VirtualGL
+# STAGE 2: Install VirtualGL (with retry)
 # ============================================
-RUN wget -q https://github.com/VirtualGL/virtualgl/releases/download/3.1.4/virtualgl_3.1.4_amd64.deb \
-    -O /tmp/virtualgl.deb && \
-    apt-get update && \
-    dpkg -i /tmp/virtualgl.deb || apt-get install -f -y && \
-    rm /tmp/virtualgl.deb && \
-    rm -rf /var/lib/apt/lists/* && \
-    test -x /opt/VirtualGL/bin/vglrun
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing VirtualGL..." && \
+        rm -f /tmp/virtualgl.deb && \
+        wget -q https://github.com/VirtualGL/virtualgl/releases/download/3.1.4/virtualgl_3.1.4_amd64.deb \
+            -O /tmp/virtualgl.deb && \
+        apt-get update && \
+        dpkg -i /tmp/virtualgl.deb || apt-get install -f -y && \
+        rm /tmp/virtualgl.deb && \
+        rm -rf /var/lib/apt/lists/* && \
+        /opt/VirtualGL/bin/vglrun --help > /dev/null 2>&1 && \
+        echo "VirtualGL installation verified" && \
+        break || \
+        { echo "Attempt $i failed, retrying..."; rm -f /tmp/virtualgl.deb; sleep 2; }; \
+    done && test -x /opt/VirtualGL/bin/vglrun
 
 # ============================================
-# STAGE 2b: Install TurboVNC
+# STAGE 2b: Install TurboVNC (with retry)
 # ============================================
 # TurboVNC is optimized for VirtualGL workflows and provides the best performance
 # for remote 3D visualization. It's specifically designed for high-performance
@@ -71,11 +78,18 @@ RUN wget -q https://github.com/VirtualGL/virtualgl/releases/download/3.1.4/virtu
 # TurboVNC + noVNC provides:
 # - Best native client performance (TurboVNC client on port 5901)
 # - Browser fallback via noVNC (same desktop session on port 6080)
-RUN wget -q https://github.com/TurboVNC/turbovnc/releases/download/3.1.4/turbovnc_3.1.4_amd64.deb \
-    -O /tmp/turbovnc.deb && \
-    dpkg -i /tmp/turbovnc.deb && \
-    rm /tmp/turbovnc.deb && \
-    test -x /opt/TurboVNC/bin/vncserver
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing TurboVNC..." && \
+        rm -f /tmp/turbovnc.deb && \
+        wget -q https://github.com/TurboVNC/turbovnc/releases/download/3.1.4/turbovnc_3.1.4_amd64.deb \
+            -O /tmp/turbovnc.deb && \
+        dpkg -i /tmp/turbovnc.deb && \
+        rm /tmp/turbovnc.deb && \
+        /opt/TurboVNC/bin/vncserver -help 2>&1 | head -1 && \
+        echo "TurboVNC installation verified" && \
+        break || \
+        { echo "Attempt $i failed, retrying..."; rm -f /tmp/turbovnc.deb; sleep 2; }; \
+    done && test -x /opt/TurboVNC/bin/vncserver
 
 # ============================================
 # STAGE 3: Install uv (Python package manager)
@@ -123,25 +137,23 @@ RUN npm install -g @anthropic-ai/claude-code && \
     echo "Claude Code installation verified"
 
 # ============================================
-# STAGE 4c: Install File Browser (with retry and fallback)
+# STAGE 4c: Install File Browser (direct download - more reliable on Windows Docker)
 # ============================================
+# NOTE: Avoid "curl | bash" patterns - they're unreliable when building on Windows
 RUN for i in 1 2 3; do \
         echo "Attempt $i: Installing File Browser..." && \
-        curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash && \
+        rm -f /usr/local/bin/filebrowser /tmp/fb.tar.gz && \
+        FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*') && \
+        echo "Downloading File Browser v${FB_VERSION}..." && \
+        curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz && \
+        tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser && \
+        rm -f /tmp/fb.tar.gz && \
+        chmod +x /usr/local/bin/filebrowser && \
         filebrowser version && \
         echo "File Browser installation verified" && \
         break || \
-        { echo "Attempt $i failed, retrying..."; sleep 2; }; \
-    done && \
-    filebrowser version || \
-    { echo "Primary install failed, trying direct download..." && \
-      FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*') && \
-      curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz && \
-      tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser && \
-      rm /tmp/fb.tar.gz && \
-      chmod +x /usr/local/bin/filebrowser && \
-      filebrowser version && \
-      echo "File Browser installed via fallback"; }
+        { echo "Attempt $i failed, cleaning up and retrying..."; rm -f /usr/local/bin/filebrowser /tmp/fb.tar.gz; sleep 3; }; \
+    done && filebrowser version
 
 # ============================================
 # STAGE 4c2: Install GitHub CLI
@@ -192,29 +204,64 @@ RUN for i in 1 2 3; do \
 # Skip Firefox first-run setup screens
 COPY firefox-policies.json /opt/firefox/distribution/policies.json
 
-# ============================================
-# STAGE 4e: Install Fiji (ImageJ)
-# ============================================
-# Fiji is a "batteries-included" distribution of ImageJ for scientific image analysis
-RUN wget -q "https://downloads.imagej.net/fiji/latest/fiji-latest-linux64-jdk.zip" \
-    -O /tmp/fiji.zip && \
-    unzip -q /tmp/fiji.zip -d /opt && \
-    mv /opt/Fiji /opt/fiji && \
-    chmod +x /opt/fiji/fiji-linux-x64 && \
-    rm /tmp/fiji.zip
+# Set Firefox as default browser for xdg-open, gh auth, claude auth, etc.
+COPY firefox.desktop /usr/share/applications/firefox.desktop
+RUN update-desktop-database /usr/share/applications 2>/dev/null || true && \
+    mkdir -p /root/.config && \
+    cat > /root/.config/mimeapps.list << 'EOF'
+[Default Applications]
+text/html=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/about=firefox.desktop
+x-scheme-handler/unknown=firefox.desktop
+application/xhtml+xml=firefox.desktop
+
+[Added Associations]
+text/html=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+EOF
 
 # ============================================
-# STAGE 4f: Install Blender
+# STAGE 4e: Install Fiji (ImageJ) (with retry)
+# ============================================
+# Fiji is a "batteries-included" distribution of ImageJ for scientific image analysis
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing Fiji..." && \
+        rm -rf /tmp/fiji.zip /opt/fiji /opt/Fiji && \
+        wget -q "https://downloads.imagej.net/fiji/latest/fiji-latest-linux64-jdk.zip" \
+            -O /tmp/fiji.zip && \
+        unzip -q /tmp/fiji.zip -d /opt && \
+        mv /opt/Fiji /opt/fiji && \
+        chmod +x /opt/fiji/fiji-linux-x64 && \
+        rm /tmp/fiji.zip && \
+        /opt/fiji/fiji-linux-x64 --headless --help 2>&1 | head -1 && \
+        echo "Fiji installation verified" && \
+        break || \
+        { echo "Attempt $i failed, cleaning up and retrying..."; rm -rf /tmp/fiji.zip /opt/fiji /opt/Fiji; sleep 3; }; \
+    done && test -x /opt/fiji/fiji-linux-x64
+
+# ============================================
+# STAGE 4f: Install Blender (with retry)
 # ============================================
 # Blender is a free and open-source 3D creation suite
 RUN apt-get update && apt-get install -y --no-install-recommends librsvg2-bin xz-utils && \
-    mkdir -p /opt/blender && \
-    wget -q "https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz" \
-    -O /tmp/blender.tar.xz && \
-    tar -xf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 && \
-    rsvg-convert -w 128 -h 128 /opt/blender/blender.svg -o /opt/blender/blender.png && \
-    rm /tmp/blender.tar.xz && \
     rm -rf /var/lib/apt/lists/*
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing Blender..." && \
+        rm -rf /tmp/blender.tar.xz /opt/blender && \
+        mkdir -p /opt/blender && \
+        wget -q "https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz" \
+            -O /tmp/blender.tar.xz && \
+        tar -xf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 && \
+        rsvg-convert -w 128 -h 128 /opt/blender/blender.svg -o /opt/blender/blender.png && \
+        rm /tmp/blender.tar.xz && \
+        /opt/blender/blender --version && \
+        echo "Blender installation verified" && \
+        break || \
+        { echo "Attempt $i failed, cleaning up and retrying..."; rm -rf /tmp/blender.tar.xz /opt/blender; sleep 3; }; \
+    done && test -x /opt/blender/blender
 
 # ============================================
 # STAGE 5: Download model weights
@@ -229,15 +276,23 @@ snapshot_download('nnInteractive/nnInteractive', \
     local_dir_use_symlinks=False)"
 
 # ============================================
-# STAGE 6: Install 3D Slicer 5.10.0
+# STAGE 6: Install 3D Slicer 5.10.0 (with retry)
 # ============================================
 # Download from official Slicer website (stable release for Linux)
 # Note: This URL redirects to the latest stable release
-RUN mkdir -p /opt/slicer && \
-    wget -q "https://download.slicer.org/download?os=linux&stability=release" \
-    -O /tmp/slicer.tar.gz && \
-    tar -xzf /tmp/slicer.tar.gz -C /opt/slicer --strip-components=1 && \
-    rm /tmp/slicer.tar.gz
+RUN for i in 1 2 3; do \
+        echo "Attempt $i: Installing 3D Slicer..." && \
+        rm -rf /tmp/slicer.tar.gz /opt/slicer && \
+        mkdir -p /opt/slicer && \
+        wget -q "https://download.slicer.org/download?os=linux&stability=release" \
+            -O /tmp/slicer.tar.gz && \
+        tar -xzf /tmp/slicer.tar.gz -C /opt/slicer --strip-components=1 && \
+        rm /tmp/slicer.tar.gz && \
+        test -x /opt/slicer/Slicer && \
+        echo "3D Slicer installation verified" && \
+        break || \
+        { echo "Attempt $i failed, cleaning up and retrying..."; rm -rf /tmp/slicer.tar.gz /opt/slicer; sleep 3; }; \
+    done && test -x /opt/slicer/Slicer
 
 # ============================================
 # STAGE 7: Install NNInteractive Slicer Extension
@@ -376,10 +431,6 @@ RUN chmod +x /usr/local/bin/github-launcher
 # Create /GITHUB directory for repositories
 RUN mkdir -p /GITHUB
 
-# Fix any Windows line endings (CRLF -> LF) in scripts
-# This ensures scripts work even if edited on Windows
-RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup 2>/dev/null || true
-
 # Configure git with noreply email by default
 RUN git config --global user.email "user@users.noreply.github.com" && \
     git config --global user.name "user" && \
@@ -392,10 +443,32 @@ COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 # ============================================
+# STAGE 12: Fix Windows line endings and verify binaries
+# ============================================
+# CRITICAL: This must run AFTER all files are copied
+# Fixes CRLF -> LF for all scripts (Windows Docker build issue)
+RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup \
+    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop 2>/dev/null || true
+
+# Verify all critical binaries are working (not just existing)
+# This catches corruption that can occur when building on Windows
+RUN echo "Verifying critical binaries..." && \
+    filebrowser version && \
+    lazygit --version && \
+    firefox --version && \
+    /opt/slicer/Slicer --version 2>/dev/null || true && \
+    /opt/fiji/fiji-linux-x64 --help 2>/dev/null | head -1 || true && \
+    /opt/blender/blender --version && \
+    /opt/VirtualGL/bin/vglrun -d egl /bin/true && \
+    /opt/TurboVNC/bin/vncserver -help 2>&1 | head -1 && \
+    echo "All binary verifications passed"
+
+# ============================================
 # Environment variables
 # ============================================
 ENV DISPLAY=:1
 ENV HOME=/root
+ENV BROWSER=/opt/firefox/firefox
 WORKDIR /root
 
 # ============================================

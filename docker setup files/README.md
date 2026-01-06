@@ -346,6 +346,47 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 2. **For quick checks**: Use noVNC via browser (same desktop session)
 3. **Both can be used simultaneously** - they share the same X session
 
+## Building on Windows (Known Issues)
+
+When building this Docker image on Windows (Docker Desktop), several issues can occur due to differences in how Windows handles files and network operations:
+
+### Common Problems
+
+| Issue | Symptom | Cause |
+|-------|---------|-------|
+| **CRLF line endings** | Scripts fail with `\r` errors | Windows Git converts LF to CRLF |
+| **Binary corruption** | `Trace/breakpoint trap` errors | Downloads corrupted during build |
+| **Curl pipe failures** | `curl \| bash` installs fail | Windows networking quirks |
+
+### How We Mitigate These
+
+1. **`.gitattributes`** - Forces LF line endings for all scripts
+2. **Retry logic** - All binary downloads retry 3 times with cleanup
+3. **Direct downloads** - Avoid `curl \| bash` patterns (unreliable on Windows)
+4. **Final verification** - Build verifies all binaries work before completing
+5. **CRLF cleanup** - `sed` removes any remaining Windows line endings
+
+### If Binaries Are Corrupted at Runtime
+
+If you see `Trace/breakpoint trap (core dumped)` errors when running tools like `filebrowser`, `lazygit`, etc., the binary was corrupted during build. To fix:
+
+```bash
+# Example: Reinstall filebrowser
+rm -f /usr/local/bin/filebrowser
+FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*')
+curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz
+tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser
+rm /tmp/fb.tar.gz
+chmod +x /usr/local/bin/filebrowser
+filebrowser version  # Verify it works
+```
+
+Similar commands work for `lazygit` and other tools.
+
+### Recommended: Build on Linux
+
+For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Actions, etc.) instead of Docker Desktop on Windows.
+
 ## Sources & Credits
 
 - [SlicerNNInteractive](https://github.com/coendevente/SlicerNNInteractive) - Extension by Coen de Vente
@@ -359,6 +400,19 @@ All GPU-accelerated streaming solutions use UDP for low-latency video delivery:
 - [Blender](https://www.blender.org/) - 3D creation suite
 
 ## Version History
+
+- **v13** - January 2026
+  - **Major Windows build reliability improvements**
+    - Added retry logic (3 attempts) to ALL binary downloads: VirtualGL, TurboVNC, Fiji, Blender, 3D Slicer
+    - Replaced File Browser's unreliable `curl | bash` install with direct GitHub download
+    - Added final verification stage that tests all binaries before build completes
+    - Fixed sed CRLF cleanup running BEFORE start.sh was copied (critical bug)
+  - **Fixed Firefox as default browser** - Was documented but not actually implemented
+    - Added `MimeType` entries to firefox.desktop for URL handling
+    - Created `/root/.config/mimeapps.list` with Firefox as default for http/https
+    - Added `BROWSER` environment variable for CLI tools
+    - Firefox now works with `xdg-open`, `gh auth login --web`, Claude Code auth
+  - **Added comprehensive Windows build documentation** in README
 
 - **v12** - January 2026
   - **Replaced Chrome with Firefox** - Chrome had persistent issues with sandbox flags and default browser detection in Docker
