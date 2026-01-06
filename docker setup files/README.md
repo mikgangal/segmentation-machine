@@ -366,7 +366,7 @@ When building this Docker image on Windows (Docker Desktop), several issues can 
 3. **Direct downloads** - Avoid `curl \| bash` patterns (unreliable on Windows)
 4. **Final verification** - Build verifies all binaries work before completing
 5. **CRLF cleanup** - `sed` removes any remaining Windows line endings
-6. **Runtime self-healing** - `start-filebrowser` detects corrupted binary and auto-downloads fresh copy
+6. **Runtime self-healing** - `start-filebrowser` and `github-launcher` detect corrupted binaries and auto-download fresh copies
 
 ### If Binaries Are Corrupted at Runtime
 
@@ -374,18 +374,7 @@ If you see `Trace/breakpoint trap (core dumped)` errors when running tools, the 
 
 **File Browser:** Has automatic self-healing. Just run `start-filebrowser` - it detects the corrupted binary and downloads a fresh copy automatically.
 
-**Other tools (lazygit, etc.):** Manually reinstall:
-
-```bash
-# Example: Reinstall lazygit
-rm -f /usr/local/bin/lazygit
-LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
-curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
-tar xf /tmp/lazygit.tar.gz -C /tmp lazygit
-install /tmp/lazygit /usr/local/bin
-rm -f /tmp/lazygit.tar.gz /tmp/lazygit
-lazygit --version  # Verify it works
-```
+**lazygit:** Has automatic self-healing. Just click the GitHub desktop shortcut (runs `github-launcher`) - it detects the corrupted binary and downloads a fresh copy automatically before proceeding.
 
 ### Recommended: Build on Linux
 
