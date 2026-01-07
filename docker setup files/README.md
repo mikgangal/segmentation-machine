@@ -11,12 +11,13 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **noVNC** - Browser-based VNC fallback (same desktop session)
 - **Pre-downloaded Model Weights** - Works immediately, no downloads on startup
 - **Claude Code CLI** - AI coding assistant from Anthropic
-- **File Transfer** - Web-based file manager for uploads/downloads
+- **File Transfer + T2 Watcher** - Auto-starts on VNC connect, web uploads + auto-load T2 into Slicer
 - **Firefox** - Default web browser (pre-configured, no setup prompts)
 - **GitHub CLI + lazygit** - Git workflow with visual terminal UI
 - **nvtop** - GPU monitoring tool
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
+- **DICOM Utilities** - pydicom + watchdog for T2 auto-loader scripts
 
 ## Prerequisites
 
@@ -40,7 +41,8 @@ docker-build/
 ├── Dockerfile
 ├── xstartup
 ├── start.sh
-├── start-filebrowser
+├── start-file-watcher.sh   # Hybrid: file browser + T2 auto-loader
+├── file-watcher.desktop    # XFCE autostart entry
 ├── github-launcher
 ├── firefox-policies.json
 ├── slicer.desktop          # Main desktop
@@ -49,7 +51,7 @@ docker-build/
 ├── github.desktop          # Tools folder
 ├── fiji.desktop            # Tools folder
 ├── blender.desktop         # Tools folder
-├── filebrowser.desktop     # Tools folder
+├── filebrowser.desktop     # Tools folder (manual restart)
 ├── nvtop.desktop           # Tools folder
 ├── claude.desktop          # Tools folder
 └── README.md (this file)
@@ -136,23 +138,42 @@ TurboVNC is optimized for VirtualGL and provides the best performance for 3D app
 - **Port:** 8000
 - Start from desktop icon or run: `nninteractive-slicer-server --host 0.0.0.0 --port 8000`
 
-### File Transfer (Web-based file manager)
+### File Transfer + T2 Watcher (Auto-starts on VNC connect)
+
+This hybrid service **automatically launches when you connect to VNC** - no manual startup required.
+
 - **Port:** 8080
 - **Username:** `admin`
 - **Password:** `runpod`
 - **Root:** `/` (full filesystem access)
-- Start from desktop icon "File Transfer" in Tools folder or run: `start-filebrowser`
+- **Access:** `https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/`
 
-**What happens when you launch:**
-1. **Self-healing check** - Detects and fixes corrupted filebrowser binary (Windows Docker build issue)
-2. Creates `/FILE TRANSFERS` folder (first run only)
-3. Opens Thunar file manager in that folder (top-right of screen)
-4. Shows terminal with URL and credentials (bottom-right of screen)
-5. Browser URL points directly to FILE TRANSFERS folder
+**What happens when you connect to VNC:**
+1. XFCE desktop starts
+2. Terminal window opens automatically with the file watcher log
+3. File browser starts on port 8080
+4. Folder watcher monitors `/FILE TRANSFERS` for new DICOM uploads
+5. Any uploaded folder with T2 sequences auto-loads into 3D Slicer
 
-**Access:** `https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/`
+**Terminal shows:**
+```
+============================================================
+  FILE TRANSFER + T2 WATCHER
+============================================================
 
-You can navigate to any folder from the browser interface, but FILE TRANSFERS is the default landing page for easy file uploads/downloads.
+  URL:       https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/
+  Login:     admin / runpod
+
+  Watching:  /FILE TRANSFERS
+  Action:    Auto-load T2 DICOM into 3D Slicer
+
+============================================================
+
+Upload DICOM folders via browser - T2 series will auto-load!
+Press Ctrl+C to stop.
+```
+
+**Closing the terminal stops both services.** To restart manually, double-click "File Transfer + T2 Watcher" in the Tools folder.
 
 ### Claude Code CLI
 - Run from terminal: `claude`
@@ -185,6 +206,63 @@ The "GitHub" desktop shortcut provides a streamlined Git workflow:
 | `P` | Push |
 | `?` | Show all keybindings |
 | `q` | Quit |
+
+### T2 DICOM Auto-Loader (Integrated)
+
+The T2 auto-loader is now **integrated into the File Transfer service** and starts automatically when you connect to VNC.
+
+#### Workflow:
+1. Connect to VNC - file watcher starts automatically
+2. Upload a DICOM folder via the web interface (port 8080)
+3. Watcher waits for upload to complete (detects when files stop arriving)
+4. Scans for T2 sequences in the uploaded folder
+5. Launches 3D Slicer with GPU acceleration and loads T2 series
+
+**How it works (Technical Details):**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    T2 Auto-Loader Flow                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. SCAN: glob.glob("**/*.dcm", recursive=True)                │
+│     └── Finds all DICOM files in folder tree                   │
+│                                                                 │
+│  2. READ: pydicom.dcmread(file, stop_before_pixels=True)       │
+│     └── Reads only metadata (fast, skips pixel data)           │
+│                                                                 │
+│  3. IDENTIFY: Check SeriesDescription + ProtocolName           │
+│     └── Match patterns: T2, T2W, T2_, _T2 (case-insensitive)  │
+│                                                                 │
+│  4. GROUP: Collect files by SeriesInstanceUID                  │
+│     └── Groups slices belonging to same series                 │
+│                                                                 │
+│  5. LAUNCH: subprocess.Popen(["/usr/local/bin/Slicer", ...])  │
+│     └── Starts Slicer with GPU (VirtualGL) wrapper             │
+│                                                                 │
+│  6. LOAD: Generate temp Python script for Slicer               │
+│     └── Uses DICOMUtils.loadSeriesByUID() to load series       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**DICOM Tags Used:**
+| Tag | Name | Example |
+|-----|------|---------|
+| `(0008,103E)` | SeriesDescription | "SAG T2 sms" |
+| `(0018,1030)` | ProtocolName | "SAG T2 sms" |
+| `(0020,000E)` | SeriesInstanceUID | Unique series identifier |
+
+**Dependencies:**
+- `pydicom` - Read DICOM metadata
+- `watchdog` - Folder monitoring (for watcher script)
+
+Both are pre-installed in the Docker image.
+
+**Compatibility:**
+Works with any DICOM source (CT, MRI from any vendor) as long as:
+- Files have `.dcm` extension
+- SeriesDescription or ProtocolName contains "T2"
 
 ## Using the Environment
 
@@ -366,13 +444,13 @@ When building this Docker image on Windows (Docker Desktop), several issues can 
 3. **Direct downloads** - Avoid `curl \| bash` patterns (unreliable on Windows)
 4. **Final verification** - Build verifies all binaries work before completing
 5. **CRLF cleanup** - `sed` removes any remaining Windows line endings
-6. **Runtime self-healing** - `start-filebrowser` and `github-launcher` detect corrupted binaries and auto-download fresh copies
+6. **Runtime self-healing** - `start-file-watcher` and `github-launcher` detect corrupted binaries and auto-download fresh copies
 
 ### If Binaries Are Corrupted at Runtime
 
 If you see `Trace/breakpoint trap (core dumped)` errors when running tools, the binary was corrupted during build.
 
-**File Browser:** Has automatic self-healing. Just run `start-filebrowser` - it detects the corrupted binary and downloads a fresh copy automatically.
+**File Browser:** Has automatic self-healing. The hybrid `start-file-watcher` script detects corrupted binaries and downloads fresh copies automatically.
 
 **lazygit:** Has automatic self-healing. Just click the GitHub desktop shortcut (runs `github-launcher`) - it detects the corrupted binary and downloads a fresh copy automatically before proceeding.
 
@@ -391,8 +469,38 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
 - [Claude Code](https://github.com/anthropics/claude-code) - AI coding assistant by Anthropic
 - [Fiji (ImageJ)](https://fiji.sc/) - Scientific image analysis platform
 - [Blender](https://www.blender.org/) - 3D creation suite
+- [pydicom](https://pydicom.github.io/) - Pure Python DICOM library
+- [watchdog](https://python-watchdog.readthedocs.io/) - File system events monitoring
 
 ## Version History
+
+- **v15** - January 2026
+  - **Hybrid File Transfer + T2 Watcher** - Combined file browser and T2 auto-loader into single service
+    - Auto-starts when VNC connects (not at container boot)
+    - Opens terminal window with log showing URL, credentials, and watcher status
+    - Closing terminal stops both file browser and T2 watcher
+    - Manual restart available from Tools folder
+  - **Smart upload detection** - Waits for upload to complete before scanning
+    - Monitors file count and total size every second
+    - Only scans when no changes detected for 5 seconds
+    - Handles slow uploads where files arrive one-by-one
+  - **XFCE autostart integration** - Uses `~/.config/autostart/` for VNC session startup
+  - **Removed separate scripts** - `start-filebrowser` and `watch_for_t2.sh` replaced by `start-file-watcher`
+  - **Updated desktop shortcut** - "File Transfer + T2 Watcher" now launches hybrid script
+
+- **v14** - January 2026
+  - **Added T2 DICOM Folder Watcher** (`watch_for_t2.sh`) for streamlined MRI workflow
+    - Monitors folder for new DICOM studies
+    - Auto-detects and loads T2 sequences into 3D Slicer
+  - **New Python dependencies** added to Docker image:
+    - `pydicom` - Read DICOM metadata (SeriesDescription, ProtocolName) without loading pixel data
+    - `watchdog` - File system event monitoring for folder watcher functionality
+  - Script automatically:
+    - Recursively scans for `.dcm` files
+    - Identifies T2 sequences by matching "T2", "T2W", "T2_", "_T2" patterns
+    - Launches 3D Slicer with GPU acceleration (VirtualGL)
+    - Loads identified series using Slicer's DICOM utilities
+  - Works with any vendor's DICOM files (Siemens, GE, Philips, etc.)
 
 - **v13** - January 2026
   - **Major Windows build reliability improvements**

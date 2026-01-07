@@ -122,6 +122,13 @@ RUN uv pip install \
 ENV PATH="/opt/uv-tools/bin:$PATH"
 
 # ============================================
+# STAGE 4a2: Install DICOM utilities for T2 auto-loader script
+# ============================================
+# pydicom: Read DICOM metadata (SeriesDescription, ProtocolName) to identify T2 sequences
+# watchdog: Monitor folders for new DICOM studies and auto-load into Slicer
+RUN pip install --break-system-packages pydicom watchdog
+
+# ============================================
 # STAGE 4b: Install Node.js 22 and Claude Code CLI
 # ============================================
 # Ubuntu's default nodejs (v18) has ES module issues with Claude Code
@@ -402,6 +409,15 @@ COPY filebrowser.desktop /root/Desktop/Tools/FileTransfer.desktop
 COPY nvtop.desktop /root/Desktop/Tools/nvtop.desktop
 COPY claude.desktop /root/Desktop/Tools/Claude.desktop
 
+# Hybrid File Transfer + T2 Watcher script (combines filebrowser + T2 auto-loader)
+COPY start-file-watcher.sh /usr/local/bin/start-file-watcher
+RUN chmod +x /usr/local/bin/start-file-watcher
+
+# XFCE autostart: Launch file watcher when VNC desktop session starts
+# (not at container boot - only when user connects to VNC)
+RUN mkdir -p /root/.config/autostart
+COPY file-watcher.desktop /root/.config/autostart/file-watcher.desktop
+
 RUN chmod +x /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop
 
 # Hide default desktop icons (home, filesystem, trash)
@@ -420,11 +436,8 @@ RUN mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml && \
 </channel>
 EOF
 
-# File Browser launcher script
-# NOTE: This script has self-healing - if filebrowser binary is corrupted (Windows Docker build issue),
-# it automatically downloads a fresh copy at runtime before starting the server.
-COPY start-filebrowser /usr/local/bin/start-filebrowser
-RUN chmod +x /usr/local/bin/start-filebrowser
+# NOTE: start-filebrowser is replaced by start-file-watcher (hybrid script)
+# which combines file browser + T2 DICOM auto-loader
 
 # GitHub launcher script (handles auth, repo selection, and lazygit)
 COPY github-launcher /usr/local/bin/github-launcher
@@ -450,7 +463,8 @@ RUN chmod +x /start.sh
 # CRITICAL: This must run AFTER all files are copied
 # Fixes CRLF -> LF for all scripts (Windows Docker build issue)
 RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup \
-    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop 2>/dev/null || true
+    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop \
+    /root/.config/autostart/*.desktop 2>/dev/null || true
 
 # Verify all critical binaries are working (not just existing)
 # This catches corruption that can occur when building on Windows

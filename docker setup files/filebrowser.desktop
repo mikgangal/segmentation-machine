@@ -1,9 +1,9 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=File Transfer
-Comment=Web-based file manager for uploading and downloading files
-Exec=xfce4-terminal --hold --title="File Transfer" -e "start-filebrowser"
+Name=File Transfer + T2 Watcher
+Comment=Web file manager + auto-load T2 DICOM into Slicer
+Exec=start-file-watcher
 Icon=system-file-manager
 Terminal=false
 Categories=Network;FileTransfer;

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=File Transfer + T2 Watcher
+Comment=Starts file browser and watches for T2 DICOM uploads
+Exec=/usr/local/bin/start-file-watcher
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
