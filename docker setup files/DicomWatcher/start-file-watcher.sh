@@ -5,7 +5,59 @@
 
 TRANSFER_DIR="/FILE TRANSFERS"
 PORT=8080
-DB="/tmp/filebrowser-$$.db"
+LOG_FILE="/tmp/dicom-services.log"
+PID_FILE="/tmp/dicom-services.pid"
+
+# ============================================
+# Mode: Services (runs minimized with verbose logs)
+# ============================================
+if [ "$1" = "--services" ]; then
+    DB="/tmp/filebrowser-$$.db"
+
+    # Self-healing: Fix corrupted filebrowser binary
+    if ! filebrowser version > /dev/null 2>&1; then
+        echo "Filebrowser binary corrupted, downloading fresh copy..."
+        FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*')
+        curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz
+        tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser
+        chmod +x /usr/local/bin/filebrowser
+        rm -f /tmp/fb.tar.gz
+    fi
+
+    mkdir -p "$TRANSFER_DIR"
+
+    # Setup filebrowser
+    filebrowser config init -d "$DB" > /dev/null 2>&1
+    filebrowser config set -d "$DB" -a 0.0.0.0 -p "$PORT" -r "/" --minimumPasswordLength 4 > /dev/null 2>&1
+    filebrowser users add admin runpod -d "$DB" --perm.admin > /dev/null 2>&1
+
+    echo "========================================"
+    echo "  SERVICE LOGS (verbose)"
+    echo "========================================"
+    echo ""
+    echo "Starting File Browser on port $PORT..."
+    filebrowser -d "$DB" &
+    FB_PID=$!
+
+    echo "Starting nnInteractive server on port 8000..."
+    echo ""
+    nninteractive-slicer-server --host 0.0.0.0 --port 8000 &
+    NN_PID=$!
+
+    # Save PIDs for cleanup
+    echo "$FB_PID $NN_PID" > "$PID_FILE"
+
+    # Cleanup on exit
+    trap "kill $FB_PID $NN_PID 2>/dev/null; rm -f $DB $PID_FILE" EXIT
+
+    # Keep running
+    wait
+    exit 0
+fi
+
+# ============================================
+# Mode: Main UI (user-facing terminal)
+# ============================================
 
 # If not running in a terminal, relaunch in one
 if [ -z "$IN_TERMINAL" ]; then
@@ -14,54 +66,13 @@ if [ -z "$IN_TERMINAL" ]; then
     exit 0
 fi
 
-# ============================================
-# Self-healing: Fix corrupted filebrowser binary
-# ============================================
-check_and_fix_filebrowser() {
-    if filebrowser version > /dev/null 2>&1; then
-        return 0
-    fi
+# Start services in a minimized terminal
+xfce4-terminal --minimize --title "Service Logs" -x bash -c "bash '$0' --services; read -p 'Press Enter to close...'" &
+sleep 1
 
-    echo "Filebrowser binary corrupted, downloading fresh copy..."
-    FB_VERSION=$(curl -s https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -Po '"tag_name": "v\K[^"]*')
-    curl -fsSL "https://github.com/filebrowser/filebrowser/releases/download/v${FB_VERSION}/linux-amd64-filebrowser.tar.gz" -o /tmp/fb.tar.gz
-    tar -xzf /tmp/fb.tar.gz -C /usr/local/bin filebrowser
-    chmod +x /usr/local/bin/filebrowser
-    rm -f /tmp/fb.tar.gz
-    filebrowser version > /dev/null 2>&1
-}
-
-# Run self-healing check
-check_and_fix_filebrowser || exit 1
-
-# ============================================
-# Create FILE TRANSFERS folder
-# ============================================
-mkdir -p "$TRANSFER_DIR"
-
-# Fixed credentials
-USER="admin"
-PASS="runpod"
-
-# Setup filebrowser database
-filebrowser config init -d "$DB" > /dev/null 2>&1
-filebrowser config set -d "$DB" -a 0.0.0.0 -p "$PORT" -r "/" --minimumPasswordLength 4 > /dev/null 2>&1
-filebrowser users add "$USER" "$PASS" -d "$DB" --perm.admin > /dev/null 2>&1
-
-# Start filebrowser in background
-filebrowser -d "$DB" &
-FB_PID=$!
-
-# Start nnInteractive server in background (needed by 3D Slicer for AI segmentation)
-echo "Starting nnInteractive server..."
-nninteractive-slicer-server --host 0.0.0.0 --port 8000 &
-NN_PID=$!
-
-# Cleanup on exit
-trap "kill $FB_PID $NN_PID 2>/dev/null; rm -f $DB" EXIT
-
-# Wait for services to start
-sleep 2
+# Wait for services to be ready
+echo "Starting services..."
+sleep 3
 
 # Get URL
 if [ -n "$RUNPOD_POD_ID" ]; then
@@ -71,28 +82,34 @@ else
     URL="http://${IP}:${PORT}/files/FILE%20TRANSFERS/"
 fi
 
+# Cleanup services on exit
+trap 'if [ -f "$PID_FILE" ]; then kill $(cat "$PID_FILE") 2>/dev/null; rm -f "$PID_FILE"; fi' EXIT
+
 # ============================================
-# Display info and start watcher
+# Display clean user info
 # ============================================
-echo "============================================================"
-echo "  DICOM WATCHER + AI SEGMENTATION"
-echo "============================================================"
+clear
 echo ""
-echo "  File Transfer:   $URL"
-echo "  Login:           $USER / $PASS"
+echo "  ╔════════════════════════════════════════════════════════╗"
+echo "  ║           DICOM WATCHER + AI SEGMENTATION              ║"
+echo "  ╠════════════════════════════════════════════════════════╣"
+echo "  ║                                                        ║"
+echo "  ║  File Transfer:  $URL"
+echo "  ║  Login:          admin / runpod                        ║"
+echo "  ║                                                        ║"
+echo "  ║  Upload a DICOM folder via browser.                    ║"
+echo "  ║  T2 series will auto-load into 3D Slicer.              ║"
+echo "  ║                                                        ║"
+echo "  ╚════════════════════════════════════════════════════════╝"
 echo ""
-echo "  nnInteractive:   Running on port 8000"
-echo "  Watching:        $TRANSFER_DIR"
-echo "  Action:          Auto-load T2 DICOM into 3D Slicer"
+echo "  Watching: $TRANSFER_DIR"
+echo "  Press Ctrl+C to stop."
 echo ""
-echo "============================================================"
-echo ""
-echo "Upload DICOM folders via browser - T2 series will auto-load!"
-echo "Press Ctrl+C to stop."
+echo "  ─────────────────────────────────────────────────────────"
 echo ""
 
 # ============================================
-# T2 Watcher (Python)
+# T2 Watcher (Python) - Clean output only
 # ============================================
 python3 << 'PYTHON_SCRIPT'
 import os
@@ -107,11 +124,11 @@ from watchdog.events import FileSystemEventHandler
 try:
     import pydicom
 except ImportError:
-    print("ERROR: pydicom not installed")
+    print("  ERROR: pydicom not installed")
     sys.exit(1)
 
 SLICER_PATH = "/usr/local/bin/Slicer"
-WATCH_DIR = "$TRANSFER_DIR"
+WATCH_DIR = "/FILE TRANSFERS"
 processed_folders = set()
 
 def find_t2_series(data_folder):
@@ -162,8 +179,6 @@ def loadDICOMData():
     """Load DICOM data after Slicer is fully initialized"""
     from DICOMLib import DICOMUtils
 
-    print(f"Loading DICOM from: {{dicom_folder}}")
-
     # Ensure DICOM module is loaded first
     try:
         slicer.util.selectModule('DICOM')
@@ -171,7 +186,6 @@ def loadDICOMData():
         pass
 
     # Initialize DICOM database
-    print("Initializing DICOM database...")
     dbPath = os.path.join(os.path.expanduser("~"), "Documents", "SlicerDICOMDatabase")
     if not os.path.exists(dbPath):
         os.makedirs(dbPath)
@@ -180,22 +194,16 @@ def loadDICOMData():
     try:
         DICOMUtils.openDatabase(dbPath)
     except Exception as e:
-        print(f"openDatabase failed: {{e}}, trying openTemporaryDatabase...")
         DICOMUtils.openTemporaryDatabase()
 
     db = slicer.dicomDatabase
     if not db or not db.isOpen:
-        print("ERROR: Failed to open DICOM database")
         return
 
-    print(f"DICOM database opened: {{db.databaseFilename}}")
-
     # Import DICOM files
-    print("Importing DICOM files...")
     indexer = ctk.ctkDICOMIndexer()
     indexer.addDirectory(db, dicom_folder)
     indexer.waitForImportFinished()
-    print("Import complete")
 
     # Load the T2 series
     loadedNodes = []
@@ -205,23 +213,33 @@ def loadDICOMData():
                 nodes = DICOMUtils.loadSeriesByUID([uid])
                 if nodes:
                     loadedNodes.extend(nodes)
-                    print(f"Loaded series: {{uid}}")
-            except Exception as e:
-                print(f"Error loading {{uid}}: {{e}}")
+            except Exception:
+                pass
 
     if loadedNodes:
-        print(f"Successfully loaded {{len(loadedNodes)}} volume(s)")
-        # Switch to a useful view
-        slicer.util.selectModule('Data')
-    else:
-        print("No volumes loaded - check DICOM data")
+        # Switch to nnInteractive for AI segmentation
+        slicer.util.selectModule('SlicerNNInteractive')
 
-# Delay execution to allow Slicer to fully initialize
-# 3000ms should be enough for DICOM module to load
+def maximizeWindow():
+    """Maximize the main window"""
+    mainWindow = slicer.util.mainWindow()
+    if mainWindow:
+        mainWindow.showMaximized()
+
+# Maximize window immediately
+qt.QTimer.singleShot(500, maximizeWindow)
+# Delay DICOM loading to allow Slicer to fully initialize
 qt.QTimer.singleShot(3000, loadDICOMData)
-print("DICOM loading scheduled (waiting for Slicer to initialize...)")
 '''
     return script
+
+def minimize_terminal():
+    """Minimize the current terminal window"""
+    try:
+        subprocess.run(['xdotool', 'getactivewindow', 'windowminimize'],
+                      capture_output=True, timeout=2)
+    except Exception:
+        pass
 
 def launch_slicer_with_dicom(dicom_folder, series_uids):
     script_content = get_slicer_load_script(dicom_folder, series_uids)
@@ -229,16 +247,20 @@ def launch_slicer_with_dicom(dicom_folder, series_uids):
         f.write(script_content)
         temp_script = f.name
     try:
-        subprocess.Popen([SLICER_PATH, '--python-script', temp_script])
+        # Redirect Slicer's output to /dev/null to keep user terminal clean
+        devnull = open(os.devnull, 'w')
+        subprocess.Popen([SLICER_PATH, '--python-script', temp_script],
+                        stdout=devnull, stderr=devnull)
+        # Give Slicer a moment to start, then minimize this terminal
+        time.sleep(2)
+        minimize_terminal()
         return True
     except Exception as e:
-        print(f"Error launching Slicer: {e}")
+        print(f"  Error launching Slicer: {e}")
         return False
 
 def wait_for_upload_complete(folder_path, stable_seconds=5):
     """Wait until no new files appear for stable_seconds"""
-    print(f"Waiting for upload to complete...")
-
     def count_files():
         count = 0
         total_size = 0
@@ -253,18 +275,23 @@ def wait_for_upload_complete(folder_path, stable_seconds=5):
 
     last_count, last_size = 0, 0
     stable_time = 0
+    spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+    i = 0
 
     while stable_time < stable_seconds:
-        time.sleep(1)
+        time.sleep(0.5)
         current_count, current_size = count_files()
 
         if current_count == last_count and current_size == last_size:
-            stable_time += 1
+            stable_time += 0.5
         else:
             stable_time = 0
             last_count, last_size = current_count, current_size
 
-    print(f"Upload complete ({last_count} files)")
+        print(f"\r  {spinner[i % len(spinner)]} Receiving files... ({last_count} files)", end='', flush=True)
+        i += 1
+
+    print(f"\r  ✓ Upload complete ({last_count} files)       ")
 
 def process_folder(folder_path):
     global processed_folders
@@ -274,26 +301,29 @@ def process_folder(folder_path):
     # Add IMMEDIATELY to prevent race condition from multiple file system events
     processed_folders.add(folder_path)
 
-    print(f"\n[NEW FOLDER] {os.path.basename(folder_path)}")
+    folder_name = os.path.basename(folder_path)
+    print(f"  ┌─ New folder: {folder_name}")
 
     # Wait for upload to finish (no new files for 5 seconds)
     wait_for_upload_complete(folder_path, stable_seconds=5)
 
-    print("Scanning for T2 series...")
+    print("  │ Scanning for T2 series...")
 
     t2_files, series_info, series_uids = find_t2_series(folder_path)
 
     if t2_files:
-        print(f"Found {len(t2_files)} T2 files in {len(series_uids)} series:")
+        print(f"  │ Found {len(series_uids)} T2 series:")
         for uid, info in series_info.items():
-            print(f"  - {info['description']} ({len(info['files'])} files)")
+            print(f"  │   • {info['description']} ({len(info['files'])} slices)")
 
         dicom_folder = os.path.dirname(t2_files[0])
-        print("Launching 3D Slicer...")
+        print("  │ Launching 3D Slicer...")
         launch_slicer_with_dicom(dicom_folder, series_uids)
-        print("Done!\n")
+        print("  └─ Done! (this window minimized)")
+        print("")
     else:
-        print("No T2 series found in this folder.\n")
+        print("  └─ No T2 series found in this folder.")
+        print("")
 
 class FolderHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -312,7 +342,7 @@ if __name__ == "__main__":
     observer.schedule(event_handler, WATCH_DIR, recursive=False)
     observer.start()
 
-    print(f"Watching for new folders in {WATCH_DIR}...")
+    print("  Waiting for uploads...")
     print("")
 
     try:
@@ -320,7 +350,7 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         observer.stop()
-        print("\nStopped watching.")
+        print("\n  Stopped.")
 
     observer.join()
 PYTHON_SCRIPT

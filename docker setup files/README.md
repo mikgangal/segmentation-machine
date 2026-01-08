@@ -482,6 +482,22 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
 
 ## Version History
 
+- **v17** - January 2026
+  - **Split terminal logging** - Verbose service logs now in separate minimized terminal
+    - Service Logs terminal (minimized): filebrowser + nnInteractive output
+    - User UI terminal (visible): Clean status display with connection info
+  - **Improved user interface**
+    - Box-styled connection info banner
+    - Spinner animation during file upload progress
+    - Tree-formatted status output (`┌─`, `│`, `└─`)
+  - **3D Slicer improvements**
+    - Launches maximized automatically
+    - Opens to nnInteractive module after DICOM loading (instead of Data module)
+    - Output redirected to /dev/null to keep user terminal clean
+  - **Auto-minimize** - User terminal minimizes when Slicer launches
+  - **Bug fix** - Fixed `$TRANSFER_DIR` variable not expanding in Python heredoc
+    - Changed quoted heredoc to use hardcoded path `/FILE TRANSFERS`
+
 - **v16** - January 2026
   - **Reorganized DicomWatcher subfolder** - Watcher-related files now in `DicomWatcher/` directory
   - **nnInteractive auto-start** - Server now launches automatically with the DICOM watcher on port 8000
