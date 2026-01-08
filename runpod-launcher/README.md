@@ -10,16 +10,17 @@ A simple Go CLI tool that launches a 3D Slicer pod on RunPod with one click.
    - Network Volume: `5oxn5a36e6` (vhp, 100GB in CA-MTL-3)
    - GPU: NVIDIA RTX PRO 6000 Blackwell Server Edition
    - Ports: inherited from template
-3. Polls pod status until public IP is assigned
-4. Polls VNC URL until port is accessible
+3. Polls pod status via GraphQL until public TCP ports are assigned
+4. Polls noVNC URL until port is accessible
 5. Displays connection info:
-   - **noVNC** (web browser)
-   - **TurboVNC** (IP:port for native VNC client)
-   - **SSH** (command with port)
-   - **File Browser** (if 8080 exposed in template)
+   - **noVNC** (web browser URL)
+   - **TurboVNC** (direct TCP IP:port for native VNC client)
+   - **SSH** (command with correct TCP port)
+   - **File Browser** (URL, opens automatically when started)
 6. Opens browser to noVNC interface
-7. Shows **account balance** (green) and **cost/hr** (red), refreshes every 5 minutes
-8. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
+7. **Monitors File Browser** (port 8080) - auto-opens browser when you start it from desktop
+8. Shows **account balance** (green) and **cost/hr** (red), refreshes every 5 minutes
+9. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
 
 ## Auto-Termination
 
