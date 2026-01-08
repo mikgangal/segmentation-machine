@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(./SlicerLauncher2.exe:*)",
+      "WebSearch"
+    ]
+  }
+}

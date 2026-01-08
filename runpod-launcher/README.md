@@ -1,0 +1,138 @@
+# RunPod Launcher for 3D Slicer
+
+A simple Go CLI tool that launches a 3D Slicer pod on RunPod with one click.
+
+## What It Does
+
+1. Prompts for RunPod API key (saves to `~/.slicer-launcher-config` for future use)
+2. Creates a pod using the RunPod REST API with:
+   - Template: `3ikte0az1e` (mikgangal/3dslicer-nninteractive:v16)
+   - Network Volume: `5oxn5a36e6` (vhp, 100GB in CA-MTL-3)
+   - GPU: NVIDIA RTX PRO 6000 Blackwell Server Edition
+   - Ports: 6080/http (noVNC), 22/tcp (SSH)
+3. Polls pod status until public IP is assigned
+4. Polls VNC URL until port is accessible
+5. Opens browser to noVNC interface
+
+## Building
+
+### Windows
+```batch
+build.bat
+```
+
+### Linux/Mac (cross-compile for Windows)
+```bash
+./build.sh
+```
+
+Both scripts output to `~/Desktop/SlicerLauncher.exe`.
+
+### Manual Build
+```bash
+go build -ldflags="-s -w" -o SlicerLauncher.exe main.go
+```
+
+## Configuration
+
+Edit constants in `main.go`:
+
+```go
+const (
+    templateID      = "3ikte0az1e"      // RunPod template ID
+    networkVolumeID = "5oxn5a36e6"      // Network volume ID (CA-MTL-3)
+)
+
+var gpuTypes = []string{
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+}
+
+var ports = []string{
+    "6080/http", // noVNC
+    "22/tcp",    // SSH
+}
+```
+
+## API Key
+
+- Get your API key from: https://www.runpod.io/console/user/settings
+- Key must have **All** permissions (not read-only)
+- Saved to: `~/.slicer-launcher-config`
+
+## RunPod REST API Notes
+
+For debugging or extending this tool:
+
+### Authentication
+```
+Authorization: Bearer <api_key>
+```
+
+### Create Pod
+```
+POST https://rest.runpod.io/v1/pods
+Content-Type: application/json
+
+{
+  "name": "slicer-1234567890",
+  "templateId": "3ikte0az1e",
+  "networkVolumeId": "5oxn5a36e6",
+  "gpuTypeIds": ["NVIDIA RTX PRO 6000 Blackwell Server Edition"],
+  "gpuCount": 1,
+  "ports": ["6080/http", "22/tcp"]
+}
+```
+
+**Important API notes:**
+- `gpuTypeIds` must be an **array**, not a string
+- `ports` must be an **array**, not a comma-separated string
+- Don't include `volumeInGb` when using a network volume
+
+### Get Pod Status
+```
+GET https://rest.runpod.io/v1/pods/{podId}
+```
+
+Pod is ready when `publicIp` field is non-empty.
+
+### Valid GPU Types (as of Jan 2026)
+```
+NVIDIA GeForce RTX 4090
+NVIDIA GeForce RTX 5090
+NVIDIA RTX 6000 Ada Generation
+NVIDIA RTX PRO 6000 Blackwell Server Edition
+NVIDIA RTX PRO 6000 Blackwell Workstation Edition
+NVIDIA A40
+NVIDIA L40S
+NVIDIA H100 80GB HBM3
+NVIDIA A100-SXM4-80GB
+... and more
+```
+
+## Debugging
+
+To add debug output, insert these lines in `launchPod()`:
+
+```go
+// After json.Marshal
+fmt.Printf("DEBUG Request body: %s\n", string(jsonBody))
+
+// After setting headers
+fmt.Printf("DEBUG Auth header: Bearer %s...%s\n", apiKey[:8], apiKey[len(apiKey)-4:])
+
+// After io.ReadAll
+fmt.Printf("DEBUG Response status: %d\n", resp.StatusCode)
+fmt.Printf("DEBUG Response body: %s\n", string(body))
+```
+
+## File Structure
+
+```
+runpod-launcher/
+├── main.go          # Main application
+├── go.mod           # Go module file
+├── build.bat        # Windows build script
+├── build.sh         # Linux/Mac cross-compile script
+├── .gitignore       # Ignores *.exe files
+└── README.md        # This file
+```
