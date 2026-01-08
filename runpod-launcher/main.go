@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 // Global state for cleanup on exit
@@ -29,27 +30,23 @@ const (
 	networkVolumeID = "5oxn5a36e6"
 	// ====================================
 
-	runpodAPIURL = "https://rest.runpod.io/v1/pods"
-	configFile   = ".slicer-launcher-config"
+	runpodAPIURL     = "https://rest.runpod.io/v1/pods"
+	runpodGraphQLURL = "https://api.runpod.io/graphql"
+	configFile       = ".slicer-launcher-config"
 )
 
 var gpuTypes = []string{
 	"NVIDIA RTX PRO 6000 Blackwell Server Edition",
 }
 
-var ports = []string{
-	"6080/http", // noVNC
-	"22/tcp",    // SSH
-}
-
 // PodRequest represents the RunPod API request body
+// Ports are inherited from the template
 type PodRequest struct {
 	Name            string   `json:"name"`
 	TemplateID      string   `json:"templateId"`
 	NetworkVolumeID string   `json:"networkVolumeId"`
 	GPUTypeIDs      []string `json:"gpuTypeIds"`
 	GPUCount        int      `json:"gpuCount"`
-	Ports           []string `json:"ports"`
 }
 
 // PodResponse represents the RunPod API response
@@ -70,7 +67,25 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+func enableWindowsANSI() {
+	if runtime.GOOS == "windows" {
+		// Enable virtual terminal processing on Windows
+		kernel32 := syscall.NewLazyDLL("kernel32.dll")
+		setConsoleMode := kernel32.NewProc("SetConsoleMode")
+		getConsoleMode := kernel32.NewProc("GetConsoleMode")
+		handle, _ := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
+
+		var mode uint32
+		getConsoleMode.Call(uintptr(handle), uintptr(unsafe.Pointer(&mode)))
+		mode |= 0x0004 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+		setConsoleMode.Call(uintptr(handle), uintptr(mode))
+	}
+}
+
 func main() {
+	// Enable ANSI colors on Windows
+	enableWindowsANSI()
+
 	fmt.Println("╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║           3D Slicer RunPod Launcher                        ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
@@ -115,13 +130,33 @@ func main() {
 	vncURL := fmt.Sprintf("https://%s-6080.proxy.runpod.net", podID)
 
 	fmt.Println("\nWaiting for pod to be ready...")
-	if err := waitForPodReady(apiKey, podID, vncURL); err != nil {
+	publicIP, portMappings, err := waitForPodReady(apiKey, podID, vncURL)
+	if err != nil {
 		fmt.Printf("Warning: %v\n", err)
 		fmt.Println("Opening browser anyway...")
 	}
 
+	// Display connection info
+	fmt.Println()
+	fmt.Println("╔════════════════════════════════════════════════════════════╗")
+	fmt.Println("║  CONNECTION INFO                                           ║")
+	fmt.Println("╠════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║  noVNC (web):   %s\n", vncURL)
+	if publicIP != "" && portMappings != nil {
+		if vncPort, ok := portMappings["5901"]; ok {
+			fmt.Printf("║  TurboVNC:      %s:%d\n", publicIP, vncPort)
+		}
+		if httpPort, ok := portMappings["8080"]; ok {
+			fmt.Printf("║  File Browser:  http://%s:%d\n", publicIP, httpPort)
+		}
+		if sshPort, ok := portMappings["22"]; ok {
+			fmt.Printf("║  SSH:           ssh root@%s -p %d\n", publicIP, sshPort)
+		}
+	}
+	fmt.Println("╚════════════════════════════════════════════════════════════╝")
+
 	// Open browser
-	fmt.Printf("\nOpening VNC interface: %s\n", vncURL)
+	fmt.Printf("\nOpening noVNC in browser...\n")
 	if err := openBrowser(vncURL); err != nil {
 		fmt.Printf("Could not open browser automatically.\n")
 		fmt.Printf("Please open this URL manually: %s\n", vncURL)
@@ -134,7 +169,37 @@ func main() {
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
+	// Show initial balance (green for balance, red for cost)
+	green := "\033[32m"
+	red := "\033[31m"
+	reset := "\033[0m"
+	if info, err := getAccountInfo(apiKey); err == nil {
+		fmt.Printf("💰 Balance: %s$%.2f%s | Cost: %s$%.2f/hr%s | Est. runtime: %.1f hrs\n",
+			green, info.Balance, reset, red, info.CostPerHr, reset, info.Balance/info.CostPerHr)
+	}
+	fmt.Println()
+
+	// Start balance update goroutine
+	done := make(chan bool)
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if info, err := getAccountInfo(apiKey); err == nil {
+					fmt.Printf("\r💰 Balance: %s$%.2f%s | Cost: %s$%.2f/hr%s | Est. runtime: %.1f hrs\n",
+						green, info.Balance, reset, red, info.CostPerHr, reset, info.Balance/info.CostPerHr)
+					fmt.Print("Press Enter to TERMINATE pod and exit...")
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	waitForEnter()
+	done <- true
 
 	// Terminate pod on exit
 	if err := terminatePod(apiKey, podID); err != nil {
@@ -244,7 +309,6 @@ func launchPod(apiKey string) (string, string, error) {
 		NetworkVolumeID: networkVolumeID,
 		GPUTypeIDs:      gpuTypes,
 		GPUCount:        1,
-		Ports:           ports,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -297,9 +361,12 @@ func launchPod(apiKey string) (string, string, error) {
 	return podResp.ID, podResp.Machine.GpuDisplayName, nil
 }
 
-func waitForPodReady(apiKey, podID, vncURL string) error {
+func waitForPodReady(apiKey, podID, vncURL string) (string, map[string]int, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	podURL := fmt.Sprintf("%s/%s", runpodAPIURL, podID)
+
+	var publicIP string
+	var portMappings map[string]int
 
 	// Phase 1: Wait for pod to have a public IP (means it's actually running)
 	fmt.Print("  Pod status: starting...")
@@ -318,12 +385,15 @@ func waitForPodReady(apiKey, podID, vncURL string) error {
 		resp.Body.Close()
 
 		var pod struct {
-			DesiredStatus string `json:"desiredStatus"`
-			PublicIP      string `json:"publicIp"`
+			DesiredStatus string         `json:"desiredStatus"`
+			PublicIP      string         `json:"publicIp"`
+			PortMappings  map[string]int `json:"portMappings"`
 		}
 		json.Unmarshal(body, &pod)
 
 		if pod.PublicIP != "" {
+			publicIP = pod.PublicIP
+			portMappings = pod.PortMappings
 			fmt.Printf("\r  Pod status: RUNNING (IP: %s)    \n", pod.PublicIP)
 			break
 		}
@@ -340,14 +410,14 @@ func waitForPodReady(apiKey, podID, vncURL string) error {
 			resp.Body.Close()
 			if resp.StatusCode == 200 || resp.StatusCode == 302 || resp.StatusCode == 401 {
 				fmt.Printf("\r  VNC port: accessible!       \n")
-				return nil
+				return publicIP, portMappings, nil
 			}
 		}
 		fmt.Printf("\r  VNC port: waiting... (%ds)  ", (i+1)*5)
 		time.Sleep(5 * time.Second)
 	}
 
-	return fmt.Errorf("timeout waiting for VNC port")
+	return publicIP, portMappings, fmt.Errorf("timeout waiting for VNC port")
 }
 
 func openBrowser(url string) error {
@@ -412,4 +482,47 @@ func setupSignalHandler() {
 		}
 		os.Exit(0)
 	}()
+}
+
+// AccountInfo holds balance information
+type AccountInfo struct {
+	Balance    float64
+	CostPerHr  float64
+}
+
+func getAccountInfo(apiKey string) (*AccountInfo, error) {
+	query := `{"query": "query { myself { currentSpendPerHr clientBalance } }"}`
+
+	req, err := http.NewRequest("POST", runpodGraphQLURL+"?api_key="+apiKey, strings.NewReader(query))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		Data struct {
+			Myself struct {
+				CurrentSpendPerHr float64 `json:"currentSpendPerHr"`
+				ClientBalance     float64 `json:"clientBalance"`
+			} `json:"myself"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	return &AccountInfo{
+		Balance:   result.Data.Myself.ClientBalance,
+		CostPerHr: result.Data.Myself.CurrentSpendPerHr,
+	}, nil
 }

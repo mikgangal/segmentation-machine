@@ -9,11 +9,17 @@ A simple Go CLI tool that launches a 3D Slicer pod on RunPod with one click.
    - Template: `3ikte0az1e` (mikgangal/3dslicer-nninteractive:v16)
    - Network Volume: `5oxn5a36e6` (vhp, 100GB in CA-MTL-3)
    - GPU: NVIDIA RTX PRO 6000 Blackwell Server Edition
-   - Ports: 6080/http (noVNC), 22/tcp (SSH)
+   - Ports: inherited from template
 3. Polls pod status until public IP is assigned
 4. Polls VNC URL until port is accessible
-5. Opens browser to noVNC interface
-6. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
+5. Displays connection info:
+   - **noVNC** (web browser)
+   - **TurboVNC** (IP:port for native VNC client)
+   - **SSH** (command with port)
+   - **File Browser** (if 8080 exposed in template)
+6. Opens browser to noVNC interface
+7. Shows **account balance** (green) and **cost/hr** (red), refreshes every 5 minutes
+8. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
 
 ## Auto-Termination
 
@@ -59,12 +65,9 @@ const (
 var gpuTypes = []string{
     "NVIDIA RTX PRO 6000 Blackwell Server Edition",
 }
-
-var ports = []string{
-    "6080/http", // noVNC
-    "22/tcp",    // SSH
-}
 ```
+
+Ports are inherited from the template configuration in RunPod.
 
 ## API Key
 
@@ -91,15 +94,22 @@ Content-Type: application/json
   "templateId": "3ikte0az1e",
   "networkVolumeId": "5oxn5a36e6",
   "gpuTypeIds": ["NVIDIA RTX PRO 6000 Blackwell Server Edition"],
-  "gpuCount": 1,
-  "ports": ["6080/http", "22/tcp"]
+  "gpuCount": 1
 }
 ```
 
 **Important API notes:**
 - `gpuTypeIds` must be an **array**, not a string
-- `ports` must be an **array**, not a comma-separated string
+- Ports are inherited from the template (don't specify unless overriding)
 - Don't include `volumeInGb` when using a network volume
+
+### Get Account Balance (GraphQL)
+```
+POST https://api.runpod.io/graphql?api_key=<api_key>
+Content-Type: application/json
+
+{"query": "query { myself { currentSpendPerHr clientBalance } }"}
+```
 
 ### Get Pod Status
 ```
@@ -149,10 +159,11 @@ fmt.Printf("DEBUG Response body: %s\n", string(body))
 
 ```
 runpod-launcher/
-├── main.go          # Main application
-├── go.mod           # Go module file
-├── build.bat        # Windows build script
-├── build.sh         # Linux/Mac cross-compile script
-├── .gitignore       # Ignores *.exe files
-└── README.md        # This file
+├── SlicerLauncher.exe  # Pre-built Windows executable
+├── main.go             # Main application source
+├── go.mod              # Go module file
+├── build.bat           # Windows build script
+├── build.sh            # Linux/Mac cross-compile script
+├── .gitignore          # Ignores temp files
+└── README.md           # This file
 ```
