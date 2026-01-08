@@ -3,7 +3,7 @@
 
 *.sh text eol=lf
 *.desktop text eol=lf
+*.json text eol=lf
 xstartup text eol=lf
 github-launcher text eol=lf
-start-filebrowser text eol=lf
 Dockerfile text eol=lf

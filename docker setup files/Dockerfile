@@ -405,18 +405,18 @@ COPY firefox.desktop /root/Desktop/Tools/Firefox.desktop
 COPY github.desktop /root/Desktop/Tools/GitHub.desktop
 COPY fiji.desktop /root/Desktop/Tools/Fiji.desktop
 COPY blender.desktop /root/Desktop/Tools/Blender.desktop
-COPY filebrowser.desktop /root/Desktop/Tools/FileTransfer.desktop
+COPY DicomWatcher/filebrowser.desktop /root/Desktop/Tools/FileTransfer.desktop
 COPY nvtop.desktop /root/Desktop/Tools/nvtop.desktop
 COPY claude.desktop /root/Desktop/Tools/Claude.desktop
 
 # Hybrid File Transfer + T2 Watcher script (combines filebrowser + T2 auto-loader)
-COPY start-file-watcher.sh /usr/local/bin/start-file-watcher
-RUN chmod +x /usr/local/bin/start-file-watcher
+COPY DicomWatcher/start-file-watcher.sh /root/Desktop/Tools/start-file-watcher
+RUN chmod +x /root/Desktop/Tools/start-file-watcher
 
 # XFCE autostart: Launch file watcher when VNC desktop session starts
 # (not at container boot - only when user connects to VNC)
 RUN mkdir -p /root/.config/autostart
-COPY file-watcher.desktop /root/.config/autostart/file-watcher.desktop
+COPY DicomWatcher/file-watcher.desktop /root/.config/autostart/file-watcher.desktop
 
 RUN chmod +x /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop
 
@@ -463,7 +463,7 @@ RUN chmod +x /start.sh
 # CRITICAL: This must run AFTER all files are copied
 # Fixes CRLF -> LF for all scripts (Windows Docker build issue)
 RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup \
-    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop \
+    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop /root/Desktop/Tools/start-file-watcher \
     /root/.config/autostart/*.desktop 2>/dev/null || true
 
 # Verify all critical binaries are working (not just existing)

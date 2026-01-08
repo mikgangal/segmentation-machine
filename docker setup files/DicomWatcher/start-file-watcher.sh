@@ -52,11 +52,16 @@ filebrowser users add "$USER" "$PASS" -d "$DB" --perm.admin > /dev/null 2>&1
 filebrowser -d "$DB" &
 FB_PID=$!
 
-# Cleanup on exit
-trap "kill $FB_PID 2>/dev/null; rm -f $DB" EXIT
+# Start nnInteractive server in background (needed by 3D Slicer for AI segmentation)
+echo "Starting nnInteractive server..."
+nninteractive-slicer-server --host 0.0.0.0 --port 8000 &
+NN_PID=$!
 
-# Wait for filebrowser to start
-sleep 1
+# Cleanup on exit
+trap "kill $FB_PID $NN_PID 2>/dev/null; rm -f $DB" EXIT
+
+# Wait for services to start
+sleep 2
 
 # Get URL
 if [ -n "$RUNPOD_POD_ID" ]; then
@@ -70,14 +75,15 @@ fi
 # Display info and start watcher
 # ============================================
 echo "============================================================"
-echo "  FILE TRANSFER + T2 WATCHER"
+echo "  DICOM WATCHER + AI SEGMENTATION"
 echo "============================================================"
 echo ""
-echo "  URL:       $URL"
-echo "  Login:     $USER / $PASS"
+echo "  File Transfer:   $URL"
+echo "  Login:           $USER / $PASS"
 echo ""
-echo "  Watching:  $TRANSFER_DIR"
-echo "  Action:    Auto-load T2 DICOM into 3D Slicer"
+echo "  nnInteractive:   Running on port 8000"
+echo "  Watching:        $TRANSFER_DIR"
+echo "  Action:          Auto-load T2 DICOM into 3D Slicer"
 echo ""
 echo "============================================================"
 echo ""
@@ -88,7 +94,7 @@ echo ""
 # ============================================
 # T2 Watcher (Python)
 # ============================================
-python3 << PYTHON_SCRIPT
+python3 << 'PYTHON_SCRIPT'
 import os
 import sys
 import glob
@@ -146,28 +152,74 @@ def get_slicer_load_script(dicom_folder, series_uids):
     series_list = str(series_uids)
     script = f'''
 import slicer
-from DICOMLib import DICOMUtils
+import os
+import qt
 
 dicom_folder = r"{dicom_folder}"
 series_uids = {series_list}
 
-print(f"Loading DICOM from: {{dicom_folder}}")
+def loadDICOMData():
+    """Load DICOM data after Slicer is fully initialized"""
+    from DICOMLib import DICOMUtils
 
-indexer = ctk.ctkDICOMIndexer()
-indexer.addDirectory(slicer.dicomDatabase, dicom_folder)
-indexer.waitForImportFinished()
+    print(f"Loading DICOM from: {{dicom_folder}}")
 
-if series_uids:
-    for uid in series_uids:
-        try:
-            DICOMUtils.loadSeriesByUID([uid])
-            print(f"Loaded series: {{uid}}")
-        except Exception as e:
-            print(f"Error loading {{uid}}: {{e}}")
-else:
-    DICOMUtils.loadPatientByFolder(dicom_folder)
+    # Ensure DICOM module is loaded first
+    try:
+        slicer.util.selectModule('DICOM')
+    except:
+        pass
 
-print("T2 series loaded successfully!")
+    # Initialize DICOM database
+    print("Initializing DICOM database...")
+    dbPath = os.path.join(os.path.expanduser("~"), "Documents", "SlicerDICOMDatabase")
+    if not os.path.exists(dbPath):
+        os.makedirs(dbPath)
+
+    # Open database (this creates it if needed)
+    try:
+        DICOMUtils.openDatabase(dbPath)
+    except Exception as e:
+        print(f"openDatabase failed: {{e}}, trying openTemporaryDatabase...")
+        DICOMUtils.openTemporaryDatabase()
+
+    db = slicer.dicomDatabase
+    if not db or not db.isOpen:
+        print("ERROR: Failed to open DICOM database")
+        return
+
+    print(f"DICOM database opened: {{db.databaseFilename}}")
+
+    # Import DICOM files
+    print("Importing DICOM files...")
+    indexer = ctk.ctkDICOMIndexer()
+    indexer.addDirectory(db, dicom_folder)
+    indexer.waitForImportFinished()
+    print("Import complete")
+
+    # Load the T2 series
+    loadedNodes = []
+    if series_uids:
+        for uid in series_uids:
+            try:
+                nodes = DICOMUtils.loadSeriesByUID([uid])
+                if nodes:
+                    loadedNodes.extend(nodes)
+                    print(f"Loaded series: {{uid}}")
+            except Exception as e:
+                print(f"Error loading {{uid}}: {{e}}")
+
+    if loadedNodes:
+        print(f"Successfully loaded {{len(loadedNodes)}} volume(s)")
+        # Switch to a useful view
+        slicer.util.selectModule('Data')
+    else:
+        print("No volumes loaded - check DICOM data")
+
+# Delay execution to allow Slicer to fully initialize
+# 3000ms should be enough for DICOM module to load
+qt.QTimer.singleShot(3000, loadDICOMData)
+print("DICOM loading scheduled (waiting for Slicer to initialize...)")
 '''
     return script
 
@@ -219,6 +271,9 @@ def process_folder(folder_path):
     if folder_path in processed_folders:
         return
 
+    # Add IMMEDIATELY to prevent race condition from multiple file system events
+    processed_folders.add(folder_path)
+
     print(f"\n[NEW FOLDER] {os.path.basename(folder_path)}")
 
     # Wait for upload to finish (no new files for 5 seconds)
@@ -236,7 +291,6 @@ def process_folder(folder_path):
         dicom_folder = os.path.dirname(t2_files[0])
         print("Launching 3D Slicer...")
         launch_slicer_with_dicom(dicom_folder, series_uids)
-        processed_folders.add(folder_path)
         print("Done!\n")
     else:
         print("No T2 series found in this folder.\n")
