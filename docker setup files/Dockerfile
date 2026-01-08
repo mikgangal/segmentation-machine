@@ -388,14 +388,25 @@ RUN mkdir -p /root/.vnc && \
 # noVNC auto-redirect with password (for RunPod HTTP proxy)
 # This allows browser access via the RunPod proxy URL with auto-login
 # noVNC settings:
-#   resize=scale     - Scale remote desktop to fill browser window
+#   resize=remote    - VNC server adjusts resolution to match browser window
 #   reconnect=true   - Auto-reconnect on connection drop
 #   reconnect_delay  - Wait 1s before reconnect attempt
 #   quality=6        - JPEG quality 0-9 (6 = good balance)
 #   compression=2    - Compression 0-9 (2 = light, preserves quality)
 #   show_dot=true    - Show local cursor dot (helps with latency)
 #   bell=false       - Disable audible bell
-RUN echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=vnc.html?password=vncpass&autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000&quality=6&compression=2&show_dot=true&bell=false"></head><body>Redirecting...</body></html>' > /usr/share/novnc/index.html
+RUN cat > /usr/share/novnc/index.html << 'NOVNC_EOF'
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+localStorage.setItem('noVNC_setting_language', 'en');
+window.location.href = 'vnc.html?password=vncpass&autoconnect=true&resize=remote&reconnect=true&reconnect_delay=1000&quality=6&compression=2&show_dot=true&bell=false';
+</script>
+</head>
+<body>Redirecting...</body>
+</html>
+NOVNC_EOF
 
 # VNC xstartup
 COPY xstartup /root/.vnc/xstartup
