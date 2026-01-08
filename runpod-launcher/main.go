@@ -15,7 +15,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 // Global state for cleanup on exit
@@ -65,21 +64,6 @@ type Machine struct {
 // ErrorResponse represents an error from the API
 type ErrorResponse struct {
 	Error string `json:"error"`
-}
-
-func enableWindowsANSI() {
-	if runtime.GOOS == "windows" {
-		// Enable virtual terminal processing on Windows
-		kernel32 := syscall.NewLazyDLL("kernel32.dll")
-		setConsoleMode := kernel32.NewProc("SetConsoleMode")
-		getConsoleMode := kernel32.NewProc("GetConsoleMode")
-		handle, _ := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
-
-		var mode uint32
-		getConsoleMode.Call(uintptr(handle), uintptr(unsafe.Pointer(&mode)))
-		mode |= 0x0004 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
-		setConsoleMode.Call(uintptr(handle), uintptr(mode))
-	}
 }
 
 func main() {

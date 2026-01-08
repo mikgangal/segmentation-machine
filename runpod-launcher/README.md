@@ -33,7 +33,15 @@ The launcher automatically terminates the pod to prevent unexpected charges:
 
 ## Usage
 
-**Pre-built exe is included** - just download and run `SlicerLauncher.exe`. No secrets are baked in; you'll be prompted for your own RunPod API key on first run.
+**Pre-built executables included** - just download and run. No secrets are baked in; you'll be prompted for your own RunPod API key on first run.
+
+| Platform | File |
+|----------|------|
+| Windows | `SlicerLauncher-windows.exe` |
+| Mac (Intel) | `SlicerLauncher-mac-intel` |
+| Mac (Apple Silicon M1/M2/M3) | `SlicerLauncher-mac-arm64` |
+
+On Mac, you may need to: `chmod +x SlicerLauncher-mac-*` and allow in System Preferences > Security.
 
 ## Building (optional)
 
@@ -159,11 +167,15 @@ fmt.Printf("DEBUG Response body: %s\n", string(body))
 
 ```
 runpod-launcher/
-├── SlicerLauncher.exe  # Pre-built Windows executable
-├── main.go             # Main application source
-├── go.mod              # Go module file
-├── build.bat           # Windows build script
-├── build.sh            # Linux/Mac cross-compile script
-├── .gitignore          # Ignores temp files
-└── README.md           # This file
+├── SlicerLauncher-windows.exe  # Windows executable
+├── SlicerLauncher-mac-intel    # Mac Intel executable
+├── SlicerLauncher-mac-arm64    # Mac Apple Silicon executable
+├── main.go                     # Main application source
+├── ansi_windows.go             # Windows ANSI color support
+├── ansi_other.go               # Mac/Linux ANSI (no-op)
+├── go.mod                      # Go module file
+├── build.bat                   # Windows build script (all platforms)
+├── build.sh                    # Linux/Mac build script (all platforms)
+├── .gitignore                  # Ignores temp files
+└── README.md                   # This file
 ```
