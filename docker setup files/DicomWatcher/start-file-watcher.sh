@@ -85,6 +85,9 @@ fi
 # Cleanup services on exit
 trap 'if [ -f "$PID_FILE" ]; then kill $(cat "$PID_FILE") 2>/dev/null; rm -f "$PID_FILE"; fi' EXIT
 
+# Ensure transfer directory exists (may not exist on first run)
+mkdir -p "$TRANSFER_DIR"
+
 # ============================================
 # Display clean user info
 # ============================================
