@@ -130,29 +130,28 @@ func main() {
 	vncURL := fmt.Sprintf("https://%s-6080.proxy.runpod.net", podID)
 
 	fmt.Println("\nWaiting for pod to be ready...")
-	publicIP, portMappings, err := waitForPodReady(apiKey, podID, vncURL)
+	_, tcpPorts, err := waitForPodReady(apiKey, podID, vncURL)
 	if err != nil {
 		fmt.Printf("Warning: %v\n", err)
 		fmt.Println("Opening browser anyway...")
 	}
 
 	// Display connection info
+	fileBrowserURL := fmt.Sprintf("https://%s-8080.proxy.runpod.net/FILE%%20TRANSFERS/", podID)
 	fmt.Println()
 	fmt.Println("╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  CONNECTION INFO                                           ║")
 	fmt.Println("╠════════════════════════════════════════════════════════════╣")
 	fmt.Printf("║  noVNC (web):   %s\n", vncURL)
-	if publicIP != "" && portMappings != nil {
-		if vncPort, ok := portMappings["5901"]; ok {
-			fmt.Printf("║  TurboVNC:      %s:%d\n", publicIP, vncPort)
+	if tcpPorts != nil {
+		if port, ok := tcpPorts[5901]; ok {
+			fmt.Printf("║  TurboVNC:      %s:%d\n", port.IP, port.PublicPort)
 		}
-		if httpPort, ok := portMappings["8080"]; ok {
-			fmt.Printf("║  File Browser:  http://%s:%d\n", publicIP, httpPort)
-		}
-		if sshPort, ok := portMappings["22"]; ok {
-			fmt.Printf("║  SSH:           ssh root@%s -p %d\n", publicIP, sshPort)
+		if port, ok := tcpPorts[22]; ok {
+			fmt.Printf("║  SSH:           ssh root@%s -p %d\n", port.IP, port.PublicPort)
 		}
 	}
+	fmt.Printf("║  File Browser:  %s (when started)\n", fileBrowserURL)
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 
 	// Open browser
@@ -161,6 +160,10 @@ func main() {
 		fmt.Printf("Could not open browser automatically.\n")
 		fmt.Printf("Please open this URL manually: %s\n", vncURL)
 	}
+
+	// Monitor for file browser (port 8080) in background - uses HTTP proxy like noVNC
+	fileBrowserCheckURL := fmt.Sprintf("https://%s-8080.proxy.runpod.net", podID)
+	go monitorFileBrowser(fileBrowserCheckURL, fileBrowserURL)
 
 	fmt.Println()
 	fmt.Println("╔════════════════════════════════════════════════════════════╗")
@@ -361,18 +364,24 @@ func launchPod(apiKey string) (string, string, error) {
 	return podResp.ID, podResp.Machine.GpuDisplayName, nil
 }
 
-func waitForPodReady(apiKey, podID, vncURL string) (string, map[string]int, error) {
+// PortInfo holds TCP port mapping info
+type PortInfo struct {
+	IP         string
+	PublicPort int
+}
+
+func waitForPodReady(apiKey, podID, vncURL string) (string, map[int]PortInfo, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	podURL := fmt.Sprintf("%s/%s", runpodAPIURL, podID)
 
 	var publicIP string
-	var portMappings map[string]int
+	var tcpPorts map[int]PortInfo
 
-	// Phase 1: Wait for pod to have a public IP (means it's actually running)
+	// Phase 1: Wait for pod to have public ports (using GraphQL for accurate TCP/UDP info)
 	fmt.Print("  Pod status: starting...")
 	for i := 0; i < 120; i++ { // Max 10 minutes
-		req, _ := http.NewRequest("GET", podURL, nil)
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+		query := fmt.Sprintf(`{"query": "query { pod(input: {podId: \"%s\"}) { id runtime { ports { ip isIpPublic privatePort publicPort type } } } }"}`, podID)
+		req, _ := http.NewRequest("POST", runpodGraphQLURL+"?api_key="+apiKey, strings.NewReader(query))
+		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -384,21 +393,38 @@ func waitForPodReady(apiKey, podID, vncURL string) (string, map[string]int, erro
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
-		var pod struct {
-			DesiredStatus string         `json:"desiredStatus"`
-			PublicIP      string         `json:"publicIp"`
-			PortMappings  map[string]int `json:"portMappings"`
+		var result struct {
+			Data struct {
+				Pod struct {
+					Runtime *struct {
+						Ports []struct {
+							IP         string `json:"ip"`
+							IsIPPublic bool   `json:"isIpPublic"`
+							PrivatePort int   `json:"privatePort"`
+							PublicPort  int   `json:"publicPort"`
+							Type        string `json:"type"`
+						} `json:"ports"`
+					} `json:"runtime"`
+				} `json:"pod"`
+			} `json:"data"`
 		}
-		json.Unmarshal(body, &pod)
+		json.Unmarshal(body, &result)
 
-		if pod.PublicIP != "" {
-			publicIP = pod.PublicIP
-			portMappings = pod.PortMappings
-			fmt.Printf("\r  Pod status: RUNNING (IP: %s)    \n", pod.PublicIP)
-			break
+		if result.Data.Pod.Runtime != nil && len(result.Data.Pod.Runtime.Ports) > 0 {
+			tcpPorts = make(map[int]PortInfo)
+			for _, p := range result.Data.Pod.Runtime.Ports {
+				if p.Type == "tcp" && p.IsIPPublic {
+					publicIP = p.IP
+					tcpPorts[p.PrivatePort] = PortInfo{IP: p.IP, PublicPort: p.PublicPort}
+				}
+			}
+			if publicIP != "" {
+				fmt.Printf("\r  Pod status: RUNNING (IP: %s)    \n", publicIP)
+				break
+			}
 		}
 
-		fmt.Printf("\r  Pod status: %s (%ds)...    ", pod.DesiredStatus, (i+1)*5)
+		fmt.Printf("\r  Pod status: starting (%ds)...    ", (i+1)*5)
 		time.Sleep(5 * time.Second)
 	}
 
@@ -410,14 +436,33 @@ func waitForPodReady(apiKey, podID, vncURL string) (string, map[string]int, erro
 			resp.Body.Close()
 			if resp.StatusCode == 200 || resp.StatusCode == 302 || resp.StatusCode == 401 {
 				fmt.Printf("\r  VNC port: accessible!       \n")
-				return publicIP, portMappings, nil
+				return publicIP, tcpPorts, nil
 			}
 		}
 		fmt.Printf("\r  VNC port: waiting... (%ds)  ", (i+1)*5)
 		time.Sleep(5 * time.Second)
 	}
 
-	return publicIP, portMappings, fmt.Errorf("timeout waiting for VNC port")
+	return publicIP, tcpPorts, fmt.Errorf("timeout waiting for VNC port")
+}
+
+func monitorFileBrowser(checkURL, openURL string) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	fmt.Println("Monitoring for File Browser (port 8080)...")
+
+	for {
+		resp, err := client.Get(checkURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == 200 || resp.StatusCode == 401 || resp.StatusCode == 302 {
+				fmt.Printf("\n✓ File Browser detected! Opening: %s\n", openURL)
+				fmt.Print("Press Enter to TERMINATE pod and exit...")
+				openBrowser(openURL)
+				return
+			}
+		}
+		time.Sleep(3 * time.Second)
+	}
 }
 
 func openBrowser(url string) error {
