@@ -1,1 +1,4 @@
-*.exe
+# Keep SlicerLauncher.exe in repo (no secrets)
+# Ignore temp/test builds
+*~
+*.tmp

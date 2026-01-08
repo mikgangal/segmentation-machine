@@ -13,8 +13,23 @@ A simple Go CLI tool that launches a 3D Slicer pod on RunPod with one click.
 3. Polls pod status until public IP is assigned
 4. Polls VNC URL until port is accessible
 5. Opens browser to noVNC interface
+6. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
 
-## Building
+## Auto-Termination
+
+The launcher automatically terminates the pod to prevent unexpected charges:
+
+- **Press Enter** → Pod is terminated, window closes
+- **Ctrl+C** → Pod is terminated gracefully
+- **Close window** → Signal handler terminates pod (best effort)
+
+⚠️ **Warning**: This means any unsaved work in the pod will be lost. Save your data to the network volume before closing!
+
+## Usage
+
+**Pre-built exe is included** - just download and run `SlicerLauncher.exe`. No secrets are baked in; you'll be prompted for your own RunPod API key on first run.
+
+## Building (optional)
 
 ### Windows
 ```batch
@@ -25,8 +40,6 @@ build.bat
 ```bash
 ./build.sh
 ```
-
-Both scripts output to `~/Desktop/SlicerLauncher.exe`.
 
 ### Manual Build
 ```bash
@@ -94,6 +107,13 @@ GET https://rest.runpod.io/v1/pods/{podId}
 ```
 
 Pod is ready when `publicIp` field is non-empty.
+
+### Terminate Pod
+```
+DELETE https://rest.runpod.io/v1/pods/{podId}
+```
+
+Returns 200 or 204 on success.
 
 ### Valid GPU Types (as of Jan 2026)
 ```

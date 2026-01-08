@@ -1,9 +1,8 @@
 @echo off
-set OUTPUT=%USERPROFILE%\Desktop\SlicerLauncher.exe
 echo Building SlicerLauncher.exe...
-go build -ldflags="-s -w" -o "%OUTPUT%" main.go
+go build -ldflags="-s -w" -o SlicerLauncher.exe main.go
 if %ERRORLEVEL% EQU 0 (
-    echo Build successful: %OUTPUT%
+    echo Build successful: SlicerLauncher.exe
 ) else (
     echo Build failed!
 )

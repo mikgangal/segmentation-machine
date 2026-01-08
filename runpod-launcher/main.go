@@ -9,10 +9,18 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
+)
+
+// Global state for cleanup on exit
+var (
+	activePodID  string
+	activeAPIKey string
 )
 
 const (
@@ -68,6 +76,9 @@ func main() {
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
+	// Setup signal handler for cleanup on Ctrl+C or window close
+	setupSignalHandler()
+
 	// Get API key
 	apiKey, err := getAPIKey()
 	if err != nil {
@@ -89,6 +100,10 @@ func main() {
 		waitForEnter()
 		os.Exit(1)
 	}
+
+	// Store for cleanup on exit
+	activeAPIKey = apiKey
+	activePodID = podID
 
 	fmt.Printf("✓ Pod created successfully!\n")
 	fmt.Printf("  Pod ID: %s\n", podID)
@@ -114,12 +129,17 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("╔════════════════════════════════════════════════════════════╗")
-	fmt.Println("║  IMPORTANT: Remember to STOP your pod when done to avoid   ║")
-	fmt.Println("║  charges! Go to https://www.runpod.io/console/pods         ║")
+	fmt.Println("║  WARNING: Closing this window or pressing Enter will       ║")
+	fmt.Println("║  TERMINATE the pod to avoid charges!                       ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
 	waitForEnter()
+
+	// Terminate pod on exit
+	if err := terminatePod(apiKey, podID); err != nil {
+		fmt.Printf("Warning: %v\n", err)
+	}
 }
 
 func getConfigPath() (string, error) {
@@ -346,6 +366,50 @@ func openBrowser(url string) error {
 }
 
 func waitForEnter() {
-	fmt.Print("Press Enter to exit...")
+	fmt.Print("Press Enter to TERMINATE pod and exit...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
+}
+
+func terminatePod(apiKey, podID string) error {
+	if podID == "" || apiKey == "" {
+		return nil
+	}
+
+	fmt.Printf("\nTerminating pod %s...\n", podID)
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s", runpodAPIURL, podID), nil)
+	if err != nil {
+		return fmt.Errorf("could not create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 || resp.StatusCode == 204 {
+		fmt.Println("✓ Pod terminated successfully!")
+		return nil
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("failed to terminate pod (%d): %s", resp.StatusCode, string(body))
+}
+
+func setupSignalHandler() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		fmt.Println("\n\nReceived interrupt signal...")
+		if activePodID != "" {
+			terminatePod(activeAPIKey, activePodID)
+		}
+		os.Exit(0)
+	}()
 }
