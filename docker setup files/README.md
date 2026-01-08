@@ -41,19 +41,20 @@ docker-build/
 ├── Dockerfile
 ├── xstartup
 ├── start.sh
-├── start-file-watcher.sh   # Hybrid: file browser + T2 auto-loader
-├── file-watcher.desktop    # XFCE autostart entry
 ├── github-launcher
 ├── firefox-policies.json
-├── slicer.desktop          # Main desktop
-├── nninteractive.desktop   # Main desktop
-├── firefox.desktop         # Tools folder
-├── github.desktop          # Tools folder
-├── fiji.desktop            # Tools folder
-├── blender.desktop         # Tools folder
-├── filebrowser.desktop     # Tools folder (manual restart)
-├── nvtop.desktop           # Tools folder
-├── claude.desktop          # Tools folder
+├── DicomWatcher/               # DICOM watcher + file transfer
+│   ├── start-file-watcher.sh   # Hybrid: file browser + T2 auto-loader + nnInteractive
+│   ├── file-watcher.desktop    # XFCE autostart entry
+│   └── filebrowser.desktop     # Tools folder shortcut
+├── slicer.desktop              # Main desktop
+├── nninteractive.desktop       # Manual restart for nnInteractive server
+├── firefox.desktop             # Tools folder
+├── github.desktop              # Tools folder
+├── fiji.desktop                # Tools folder
+├── blender.desktop             # Tools folder
+├── nvtop.desktop               # Tools folder
+├── claude.desktop              # Tools folder
 └── README.md (this file)
 ```
 
@@ -136,13 +137,15 @@ TurboVNC is optimized for VirtualGL and provides the best performance for 3D app
 
 ### nnInteractive API
 - **Port:** 8000
-- Start from desktop icon or run: `nninteractive-slicer-server --host 0.0.0.0 --port 8000`
+- **Auto-starts** with the DICOM watcher when you connect to VNC
+- Manual restart: Use the `nnInteractive Server` desktop icon if needed
 
-### File Transfer + T2 Watcher (Auto-starts on VNC connect)
+### DICOM Watcher + AI Segmentation (Auto-starts on VNC connect)
 
 This hybrid service **automatically launches when you connect to VNC** - no manual startup required.
 
-- **Port:** 8080
+- **File Transfer Port:** 8080
+- **nnInteractive Port:** 8000
 - **Username:** `admin`
 - **Password:** `runpod`
 - **Root:** `/` (full filesystem access)
@@ -150,22 +153,24 @@ This hybrid service **automatically launches when you connect to VNC** - no manu
 
 **What happens when you connect to VNC:**
 1. XFCE desktop starts
-2. Terminal window opens automatically with the file watcher log
-3. File browser starts on port 8080
-4. Folder watcher monitors `/FILE TRANSFERS` for new DICOM uploads
-5. Any uploaded folder with T2 sequences auto-loads into 3D Slicer
+2. Terminal window opens automatically with the service log
+3. nnInteractive server starts on port 8000 (ready for AI segmentation)
+4. File browser starts on port 8080
+5. Folder watcher monitors `/FILE TRANSFERS` for new DICOM uploads
+6. Any uploaded folder with T2 sequences auto-loads into 3D Slicer
 
 **Terminal shows:**
 ```
 ============================================================
-  FILE TRANSFER + T2 WATCHER
+  DICOM WATCHER + AI SEGMENTATION
 ============================================================
 
-  URL:       https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/
-  Login:     admin / runpod
+  File Transfer:   https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/
+  Login:           admin / runpod
 
-  Watching:  /FILE TRANSFERS
-  Action:    Auto-load T2 DICOM into 3D Slicer
+  nnInteractive:   Running on port 8000
+  Watching:        /FILE TRANSFERS
+  Action:          Auto-load T2 DICOM into 3D Slicer
 
 ============================================================
 
@@ -173,7 +178,7 @@ Upload DICOM folders via browser - T2 series will auto-load!
 Press Ctrl+C to stop.
 ```
 
-**Closing the terminal stops both services.** To restart manually, double-click "File Transfer + T2 Watcher" in the Tools folder.
+**Closing the terminal stops all services** (file browser, nnInteractive, watcher). To restart manually, double-click "File Transfer + T2 Watcher" in the Tools folder.
 
 ### Claude Code CLI
 - Run from terminal: `claude`
@@ -267,11 +272,14 @@ Works with any DICOM source (CT, MRI from any vendor) as long as:
 ## Using the Environment
 
 1. **Connect via VNC** to port 5901
-2. **Click "nnInteractive Server"** desktop icon to start the AI backend
-3. **Click "3D Slicer"** desktop icon to launch Slicer
+   - nnInteractive server auto-starts on port 8000
+   - File browser auto-starts on port 8080
+2. **Click "3D Slicer"** desktop icon to launch Slicer
    - Slicer opens directly to the nnInteractive module
    - Server URL is pre-configured to `http://0.0.0.0:8000`
-4. Load your medical images and start segmenting!
+3. Load your medical images and start segmenting!
+
+**Note:** If you need to restart the nnInteractive server, use the "nnInteractive Server" desktop icon.
 
 ## Your Data
 
@@ -473,6 +481,19 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
 - [watchdog](https://python-watchdog.readthedocs.io/) - File system events monitoring
 
 ## Version History
+
+- **v16** - January 2026
+  - **Reorganized DicomWatcher subfolder** - Watcher-related files now in `DicomWatcher/` directory
+  - **nnInteractive auto-start** - Server now launches automatically with the DICOM watcher on port 8000
+    - No need to manually start before using 3D Slicer
+    - Manual restart still available via desktop icon if needed
+  - **Fixed race condition** - Multiple Slicer instances no longer launch for single upload
+    - Added folder to processed set immediately before waiting for upload completion
+  - **Windows Docker build improvements**
+    - Quoted heredoc delimiter to prevent CRLF parsing issues
+    - Added `*.json` to `.gitattributes` for LF line endings
+    - Updated deprecated `xfce4-terminal -e` to `-x` flags
+  - **Cleanup** - Removed legacy files `start-filebrowser` and `watch_for_t2.sh`
 
 - **v15** - January 2026
   - **Hybrid File Transfer + T2 Watcher** - Combined file browser and T2 auto-loader into single service
