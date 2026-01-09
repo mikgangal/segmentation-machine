@@ -21,6 +21,7 @@ import (
 var (
 	activePodID  string
 	activeAPIKey string
+	launchStart  time.Time
 )
 
 const (
@@ -37,6 +38,16 @@ const (
 var gpuTypes = []string{
 	"NVIDIA RTX PRO 6000 Blackwell Server Edition",
 }
+
+// ANSI color codes
+const (
+	colorReset  = "\033[0m"
+	colorGreen  = "\033[32m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorCyan   = "\033[36m"
+	colorDim    = "\033[2m"
+)
 
 // PodRequest represents the RunPod API request body
 // Ports are inherited from the template
@@ -86,13 +97,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Launch pod
-	fmt.Println("\nLaunching pod...")
-	fmt.Printf("  Template ID: %s\n", templateID)
-	fmt.Printf("  Network Volume: %s\n", networkVolumeID)
-	fmt.Printf("  GPU Types: %v\n", gpuTypes)
+	// Show technical details in compact format
+	fmt.Println()
+	fmt.Printf("%s── Configuration ──────────────────────────────────────────────%s\n", colorDim, colorReset)
+	fmt.Printf("%sTemplate: %s │ Volume: %s │ GPU: %s%s\n",
+		colorDim, templateID, networkVolumeID, gpuTypes[0], colorReset)
+	fmt.Printf("%s───────────────────────────────────────────────────────────────%s\n", colorDim, colorReset)
 	fmt.Println()
 
+	// Start timing
+	launchStart = time.Now()
+
+	fmt.Println("Launching pod...")
 	podID, gpuName, err := launchPod(apiKey)
 	if err != nil {
 		fmt.Printf("Error launching pod: %v\n", err)
@@ -104,65 +120,69 @@ func main() {
 	activeAPIKey = apiKey
 	activePodID = podID
 
-	fmt.Printf("✓ Pod created successfully!\n")
-	fmt.Printf("  Pod ID: %s\n", podID)
+	fmt.Printf("  %s✓%s Pod created: %s\n", colorGreen, colorReset, podID)
 	if gpuName != "" {
-		fmt.Printf("  GPU: %s\n", gpuName)
+		fmt.Printf("  %s✓%s GPU: %s\n", colorGreen, colorReset, gpuName)
 	}
+	fmt.Println()
 
-	// Wait for pod to be ready
+	// Wait for pod to be ready with progress display
 	vncURL := fmt.Sprintf("https://%s-6080.proxy.runpod.net", podID)
-
-	fmt.Println("\nWaiting for pod to be ready...")
 	_, tcpPorts, err := waitForPodReady(apiKey, podID, vncURL)
 	if err != nil {
 		fmt.Printf("Warning: %v\n", err)
 		fmt.Println("Opening browser anyway...")
 	}
 
-	// Display connection info
+	// Calculate and display load time
+	loadDuration := time.Since(launchStart)
+	fmt.Printf("\n%s✓ Ready in %s%s\n", colorGreen, formatDuration(loadDuration), colorReset)
+
+	// Display user-friendly connection info
 	fileBrowserURL := fmt.Sprintf("https://%s-8080.proxy.runpod.net/FILE%%20TRANSFERS/", podID)
 	fmt.Println()
 	fmt.Println("╔════════════════════════════════════════════════════════════╗")
-	fmt.Println("║  CONNECTION INFO                                           ║")
+	fmt.Println("║  YOUR SESSION IS READY                                     ║")
 	fmt.Println("╠════════════════════════════════════════════════════════════╣")
-	fmt.Printf("║  noVNC (web):   %s\n", vncURL)
+	fmt.Println("║                                                            ║")
+	fmt.Println("║  Desktop (opens automatically in browser):                 ║")
+	fmt.Printf("║    %s%s%s\n", colorCyan, vncURL, colorReset)
+	fmt.Println("║                                                            ║")
+	fmt.Println("║  File Upload (drag & drop files):                          ║")
+	fmt.Printf("║    %s%s%s\n", colorCyan, fileBrowserURL, colorReset)
+	fmt.Printf("║    Login: %sadmin%s / %srunpod%s\n", colorGreen, colorReset, colorGreen, colorReset)
+	fmt.Println("║                                                            ║")
 	if tcpPorts != nil {
+		fmt.Printf("%s║  Advanced: ", colorDim)
 		if port, ok := tcpPorts[5901]; ok {
-			fmt.Printf("║  TurboVNC:      %s:%d\n", port.IP, port.PublicPort)
+			fmt.Printf("VNC %s:%d ", port.IP, port.PublicPort)
 		}
 		if port, ok := tcpPorts[22]; ok {
-			fmt.Printf("║  SSH:           ssh root@%s -p %d\n", port.IP, port.PublicPort)
+			fmt.Printf("│ SSH -p %d", port.PublicPort)
 		}
+		fmt.Printf("%s\n", colorReset)
 	}
-	fmt.Printf("║  File Browser:  %s (when started)\n", fileBrowserURL)
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 
-	// Open browser
-	fmt.Printf("\nOpening noVNC in browser...\n")
+	// Open noVNC first
+	fmt.Println()
+	fmt.Println("Opening desktop (noVNC)...")
 	if err := openBrowser(vncURL); err != nil {
-		fmt.Printf("Could not open browser automatically.\n")
-		fmt.Printf("Please open this URL manually: %s\n", vncURL)
+		fmt.Printf("Could not open browser. Open this URL: %s\n", vncURL)
 	}
 
-	// Monitor for file browser (port 8080) in background - uses HTTP proxy like noVNC
+	// Wait for File Browser and open it second (so it's the active tab)
 	fileBrowserCheckURL := fmt.Sprintf("https://%s-8080.proxy.runpod.net", podID)
-	go monitorFileBrowser(fileBrowserCheckURL, fileBrowserURL)
+	waitForFileBrowser(fileBrowserCheckURL, fileBrowserURL)
 
 	fmt.Println()
-	fmt.Println("╔════════════════════════════════════════════════════════════╗")
-	fmt.Println("║  WARNING: Closing this window or pressing Enter will       ║")
-	fmt.Println("║  TERMINATE the pod to avoid charges!                       ║")
-	fmt.Println("╚════════════════════════════════════════════════════════════╝")
+	fmt.Printf("%s⚠  IMPORTANT: Closing this window terminates the pod!%s\n", colorYellow, colorReset)
 	fmt.Println()
 
-	// Show initial balance (green for balance, red for cost)
-	green := "\033[32m"
-	red := "\033[31m"
-	reset := "\033[0m"
+	// Show initial balance
 	if info, err := getAccountInfo(apiKey); err == nil {
-		fmt.Printf("💰 Balance: %s$%.2f%s | Cost: %s$%.2f/hr%s | Est. runtime: %.1f hrs\n",
-			green, info.Balance, reset, red, info.CostPerHr, reset, info.Balance/info.CostPerHr)
+		fmt.Printf("Balance: %s$%.2f%s │ Cost: %s$%.2f/hr%s │ Runtime: ~%.1f hrs\n",
+			colorGreen, info.Balance, colorReset, colorRed, info.CostPerHr, colorReset, info.Balance/info.CostPerHr)
 	}
 	fmt.Println()
 
@@ -175,8 +195,10 @@ func main() {
 			select {
 			case <-ticker.C:
 				if info, err := getAccountInfo(apiKey); err == nil {
-					fmt.Printf("\r💰 Balance: %s$%.2f%s | Cost: %s$%.2f/hr%s | Est. runtime: %.1f hrs\n",
-						green, info.Balance, reset, red, info.CostPerHr, reset, info.Balance/info.CostPerHr)
+					elapsed := time.Since(launchStart)
+					fmt.Printf("\rBalance: %s$%.2f%s │ Cost: %s$%.2f/hr%s │ Session: %s\n",
+						colorGreen, info.Balance, colorReset, colorRed, info.CostPerHr, colorReset,
+						formatDuration(elapsed))
 					fmt.Print("Press Enter to TERMINATE pod and exit...")
 				}
 			case <-done:
@@ -192,6 +214,20 @@ func main() {
 	if err := terminatePod(apiKey, podID); err != nil {
 		fmt.Printf("Warning: %v\n", err)
 	}
+}
+
+// formatDuration formats a duration in a human-friendly way
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	} else if d < time.Hour {
+		mins := int(d.Minutes())
+		secs := int(d.Seconds()) % 60
+		return fmt.Sprintf("%dm %ds", mins, secs)
+	}
+	hrs := int(d.Hours())
+	mins := int(d.Minutes()) % 60
+	return fmt.Sprintf("%dh %dm", hrs, mins)
 }
 
 func getConfigPath() (string, error) {
@@ -360,17 +396,42 @@ func waitForPodReady(apiKey, podID, vncURL string) (string, map[int]PortInfo, er
 	var publicIP string
 	var tcpPorts map[int]PortInfo
 
-	// Phase 1: Wait for pod to have public ports (using GraphQL for accurate TCP/UDP info)
-	fmt.Print("  Pod status: starting...")
-	for i := 0; i < 120; i++ { // Max 10 minutes
-		query := fmt.Sprintf(`{"query": "query { pod(input: {podId: \"%s\"}) { id runtime { ports { ip isIpPublic privatePort publicPort type } } } }"}`, podID)
+	// Clear line helper - clears entire line
+	clearLine := "\r\033[K"
+
+	spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	spinIdx := 0
+	lastPhase := ""
+
+	// Tips to show while waiting
+	tips := []string{
+		"Your files persist on the network volume at /workspace",
+		"Use File Browser to drag & drop files directly to the pod",
+		"TurboVNC client gives better performance than browser",
+		"The nnInteractive server starts automatically with the desktop",
+		"Click '3D Slicer' on the desktop to start segmenting",
+		"GPU-accelerated apps: 3D Slicer, Blender, Fiji",
+		"SSH access: root / runpod (see connection info)",
+		"Claude Code CLI is pre-installed - just type 'claude'",
+		"Closing this window auto-terminates the pod",
+		"Balance updates every 5 minutes while running",
+		"T2 DICOM folders auto-load into Slicer when uploaded",
+		"lazygit is available via the GitHub desktop shortcut",
+	}
+	tipIdx := 0
+	lastTipTime := time.Now()
+
+	// Phase 1: Wait for pod to have public ports
+	for i := 0; i < 180; i++ { // Max 6 minutes
+		query := fmt.Sprintf(`{"query": "query { pod(input: {podId: \"%s\"}) { id desiredStatus runtime { ports { ip isIpPublic privatePort publicPort type } gpus { id } } } }"}`, podID)
 		req, _ := http.NewRequest("POST", runpodGraphQLURL+"?api_key="+apiKey, strings.NewReader(query))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := client.Do(req)
 		if err != nil {
-			fmt.Print(".")
-			time.Sleep(5 * time.Second)
+			spinIdx = (spinIdx + 1) % len(spinner)
+			fmt.Printf("%s  %s Connecting...    ", clearLine, spinner[spinIdx])
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -380,73 +441,165 @@ func waitForPodReady(apiKey, podID, vncURL string) (string, map[int]PortInfo, er
 		var result struct {
 			Data struct {
 				Pod struct {
-					Runtime *struct {
+					DesiredStatus string `json:"desiredStatus"`
+					Runtime       *struct {
 						Ports []struct {
-							IP         string `json:"ip"`
-							IsIPPublic bool   `json:"isIpPublic"`
-							PrivatePort int   `json:"privatePort"`
-							PublicPort  int   `json:"publicPort"`
+							IP          string `json:"ip"`
+							IsIPPublic  bool   `json:"isIpPublic"`
+							PrivatePort int    `json:"privatePort"`
+							PublicPort  int    `json:"publicPort"`
 							Type        string `json:"type"`
 						} `json:"ports"`
+						Gpus []struct {
+							ID string `json:"id"`
+						} `json:"gpus"`
 					} `json:"runtime"`
 				} `json:"pod"`
 			} `json:"data"`
 		}
 		json.Unmarshal(body, &result)
 
-		if result.Data.Pod.Runtime != nil && len(result.Data.Pod.Runtime.Ports) > 0 {
+		// Determine current phase based on pod state
+		var phaseName string
+		var phaseDetail string
+
+		if result.Data.Pod.Runtime == nil {
+			phaseName = "Waiting for GPU"
+			phaseDetail = "in queue"
+		} else if len(result.Data.Pod.Runtime.Gpus) == 0 {
+			phaseName = "Pulling image"
+			phaseDetail = ""
+		} else if len(result.Data.Pod.Runtime.Ports) == 0 {
+			phaseName = "Starting services"
+			phaseDetail = ""
+		} else {
+			// Check for public ports
+			hasPublic := false
 			tcpPorts = make(map[int]PortInfo)
 			for _, p := range result.Data.Pod.Runtime.Ports {
 				if p.Type == "tcp" && p.IsIPPublic {
+					hasPublic = true
 					publicIP = p.IP
 					tcpPorts[p.PrivatePort] = PortInfo{IP: p.IP, PublicPort: p.PublicPort}
 				}
 			}
-			if publicIP != "" {
-				fmt.Printf("\r  Pod status: RUNNING (IP: %s)    \n", publicIP)
-				break
+
+			if !hasPublic {
+				phaseName = "Configuring network"
+				phaseDetail = ""
+			} else {
+				phaseName = "Running"
+				phaseDetail = ""
 			}
 		}
 
-		fmt.Printf("\r  Pod status: starting (%ds)...    ", (i+1)*5)
-		time.Sleep(5 * time.Second)
+		elapsed := time.Since(launchStart)
+		spinIdx = (spinIdx + 1) % len(spinner)
+
+		// Track phase changes
+		if phaseName != lastPhase {
+			if lastPhase != "" {
+				// Clear both lines (status + tip) and print completed phase
+				fmt.Print("\033[1B")  // Move down to tip line
+				fmt.Printf("%s", clearLine)  // Clear tip line
+				fmt.Print("\033[1A")  // Move back up
+				fmt.Printf("%s  %s✓%s %s\n", clearLine, colorGreen, colorReset, lastPhase)
+			}
+			lastPhase = phaseName
+		}
+
+		// Show current phase with spinner and elapsed time
+		statusLine := fmt.Sprintf("  %s %s", spinner[spinIdx], phaseName)
+		if phaseDetail != "" {
+			statusLine += fmt.Sprintf(" (%s)", phaseDetail)
+		}
+		statusLine += fmt.Sprintf(" - %s", formatDuration(elapsed))
+
+		// Rotate tips every 5 seconds
+		if time.Since(lastTipTime) > 5*time.Second {
+			tipIdx = (tipIdx + 1) % len(tips)
+			lastTipTime = time.Now()
+		}
+
+		// Show status with tip on second line
+		fmt.Printf("%s%s\n", clearLine, statusLine)
+		fmt.Printf("%s    %s💡 %s%s", clearLine, colorDim, tips[tipIdx], colorReset)
+		// Move cursor back up one line for next update
+		fmt.Print("\033[1A")
+
+		if phaseName == "Running" && publicIP != "" {
+			// Clear both lines and print completion
+			fmt.Print("\033[1B")  // Move down to tip line
+			fmt.Printf("%s", clearLine)  // Clear tip line
+			fmt.Print("\033[1A")  // Move back up
+			fmt.Printf("%s  %s✓%s %s\n", clearLine, colorGreen, colorReset, phaseName)
+			break
+		}
+
+		time.Sleep(2 * time.Second)
 	}
 
 	// Phase 2: Wait for VNC port to be accessible
-	fmt.Print("  VNC port: checking...")
-	for i := 0; i < 60; i++ { // Max 5 minutes
+	spinIdx = 0
+	tipIdx = 0
+	lastTipTime = time.Now()
+	for i := 0; i < 60; i++ { // Max 2 minutes
 		resp, err := client.Get(vncURL)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == 200 || resp.StatusCode == 302 || resp.StatusCode == 401 {
-				fmt.Printf("\r  VNC port: accessible!       \n")
+				// Clear both lines and print completion
+				fmt.Print("\033[1B")  // Move down to tip line
+				fmt.Printf("%s", clearLine)  // Clear tip line
+				fmt.Print("\033[1A")  // Move back up
+				fmt.Printf("%s  %s✓%s Desktop ready\n", clearLine, colorGreen, colorReset)
 				return publicIP, tcpPorts, nil
 			}
 		}
-		fmt.Printf("\r  VNC port: waiting... (%ds)  ", (i+1)*5)
-		time.Sleep(5 * time.Second)
+		spinIdx = (spinIdx + 1) % len(spinner)
+		elapsed := time.Since(launchStart)
+
+		// Rotate tips every 5 seconds
+		if time.Since(lastTipTime) > 5*time.Second {
+			tipIdx = (tipIdx + 1) % len(tips)
+			lastTipTime = time.Now()
+		}
+
+		// Show status with tip
+		fmt.Printf("%s  %s Waiting for desktop - %s\n", clearLine, spinner[spinIdx], formatDuration(elapsed))
+		fmt.Printf("%s    %s💡 %s%s", clearLine, colorDim, tips[tipIdx], colorReset)
+		fmt.Print("\033[1A")  // Move cursor back up
+
+		time.Sleep(2 * time.Second)
 	}
 
 	return publicIP, tcpPorts, fmt.Errorf("timeout waiting for VNC port")
 }
 
-func monitorFileBrowser(checkURL, openURL string) {
+func waitForFileBrowser(checkURL, openURL string) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	fmt.Println("Monitoring for File Browser (port 8080)...")
+	spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	spinIdx := 0
+	clearLine := "\r\033[K"
 
-	for {
+	fmt.Printf("  %s Waiting for File Browser...", spinner[0])
+
+	for i := 0; i < 60; i++ { // Max 3 minutes
 		resp, err := client.Get(checkURL)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == 200 || resp.StatusCode == 401 || resp.StatusCode == 302 {
-				fmt.Printf("\n✓ File Browser detected! Opening: %s\n", openURL)
-				fmt.Print("Press Enter to TERMINATE pod and exit...")
+				fmt.Printf("%s  %s✓%s File Browser ready\n", clearLine, colorGreen, colorReset)
+				fmt.Println("Opening File Browser (for uploads)...")
 				openBrowser(openURL)
 				return
 			}
 		}
+		spinIdx = (spinIdx + 1) % len(spinner)
+		fmt.Printf("%s  %s Waiting for File Browser...", clearLine, spinner[spinIdx])
 		time.Sleep(3 * time.Second)
 	}
+	fmt.Printf("%s  %s⚠%s File Browser not detected (may need manual start)\n", clearLine, colorYellow, colorReset)
 }
 
 func openBrowser(url string) error {

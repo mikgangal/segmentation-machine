@@ -10,17 +10,70 @@ A simple Go CLI tool that launches a 3D Slicer pod on RunPod with one click.
    - Network Volume: `5oxn5a36e6` (vhp, 100GB in CA-MTL-3)
    - GPU: NVIDIA RTX PRO 6000 Blackwell Server Edition
    - Ports: inherited from template
-3. Polls pod status via GraphQL until public TCP ports are assigned
-4. Polls noVNC URL until port is accessible
-5. Displays connection info:
-   - **noVNC** (web browser URL)
-   - **TurboVNC** (direct TCP IP:port for native VNC client)
-   - **SSH** (command with correct TCP port)
-   - **File Browser** (URL, opens automatically when started)
-6. Opens browser to noVNC interface
-7. **Monitors File Browser** (port 8080) - auto-opens browser when you start it from desktop
-8. Shows **account balance** (green) and **cost/hr** (red), refreshes every 5 minutes
-9. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
+3. Shows **live progress** with phases and rotating tips:
+   - `Waiting for GPU` → `Pulling image` → `Starting services` → `Configuring network` → `Running` → `Desktop ready`
+4. Displays **load time** when ready (e.g., "Ready in 2m 35s")
+5. Shows user-friendly connection info:
+   - **Desktop URL** (noVNC - opens in browser)
+   - **File Upload URL** with login credentials (`admin` / `runpod`)
+   - **Advanced** (TurboVNC IP:port, SSH port) - dimmed for technical users
+6. Opens browser tabs: noVNC first, then **File Browser** (so File Browser is the active tab)
+7. Shows **account balance** (green) and **cost/hr** (red), refreshes every 5 minutes
+8. **Auto-terminates pod** when window is closed or Enter is pressed (prevents overcharges)
+
+## Sample Output
+
+```
+╔════════════════════════════════════════════════════════════╗
+║           3D Slicer RunPod Launcher                        ║
+╚════════════════════════════════════════════════════════════╝
+
+── Configuration ──────────────────────────────────────────────
+Template: 3ikte0az1e │ Volume: 5oxn5a36e6 │ GPU: NVIDIA RTX...
+───────────────────────────────────────────────────────────────
+
+Launching pod...
+  ✓ Pod created: abc123xyz
+  ✓ GPU: NVIDIA RTX PRO 6000 Blackwell Server Edition
+
+  ⠹ Waiting for GPU (in queue) - 45s
+    💡 Use File Browser to drag & drop files directly to the pod
+
+  ✓ Waiting for GPU
+  ⠸ Pulling image - 1m 15s
+    💡 TurboVNC client gives better performance than browser
+
+  ✓ Pulling image
+  ✓ Starting services
+  ✓ Running
+  ✓ Desktop ready
+
+✓ Ready in 2m 35s
+
+╔════════════════════════════════════════════════════════════╗
+║  YOUR SESSION IS READY                                     ║
+╠════════════════════════════════════════════════════════════╣
+║                                                            ║
+║  Desktop (opens automatically in browser):                 ║
+║    https://abc123xyz-6080.proxy.runpod.net                 ║
+║                                                            ║
+║  File Upload (drag & drop files):                          ║
+║    https://abc123xyz-8080.proxy.runpod.net/FILE%20TRANSFERS/
+║    Login: admin / runpod                                   ║
+║                                                            ║
+║  Advanced: VNC 123.45.67.89:12345 │ SSH -p 23456           ║
+╚════════════════════════════════════════════════════════════╝
+
+Opening desktop (noVNC)...
+  ✓ File Browser ready
+Opening File Browser (for uploads)...
+
+⚠  IMPORTANT: Closing this window terminates the pod!
+
+Balance: $50.00 │ Cost: $1.14/hr │ Runtime: ~43.9 hrs
+
+Press Enter to TERMINATE pod and exit...
+```
 
 ## Auto-Termination
 
@@ -30,7 +83,7 @@ The launcher automatically terminates the pod to prevent unexpected charges:
 - **Ctrl+C** → Pod is terminated gracefully
 - **Close window** → Signal handler terminates pod (best effort)
 
-⚠️ **Warning**: This means any unsaved work in the pod will be lost. Save your data to the network volume before closing!
+**Warning**: This means any unsaved work in the pod will be lost. Save your data to the network volume before closing!
 
 ## Usage
 
@@ -84,6 +137,28 @@ Ports are inherited from the template configuration in RunPod.
 - Key must have **All** permissions (not read-only)
 - Saved to: `~/.slicer-launcher-config`
 
+## Features
+
+### Progress Phases
+The launcher detects pod state via GraphQL and shows meaningful progress:
+- **Waiting for GPU** - Pod created, waiting for GPU allocation
+- **Pulling image** - GPU assigned, downloading Docker image
+- **Starting services** - Image ready, services starting
+- **Configuring network** - Setting up ports
+- **Running** - Pod is running
+- **Desktop ready** - VNC accessible
+
+### Rotating Tips
+While waiting, helpful tips rotate every 5 seconds:
+- File persistence info
+- File Browser usage
+- TurboVNC performance tips
+- Pre-installed tools (Claude Code, lazygit, etc.)
+- DICOM auto-loading feature
+
+### Browser Tab Order
+Opens noVNC first, then File Browser second - so **File Browser is the active tab** when loading completes. This is optimized for the upload-first workflow.
+
 ## RunPod REST API Notes
 
 For debugging or extending this tool:
@@ -120,12 +195,13 @@ Content-Type: application/json
 {"query": "query { myself { currentSpendPerHr clientBalance } }"}
 ```
 
-### Get Pod Status
+### Get Pod Status (GraphQL)
 ```
-GET https://rest.runpod.io/v1/pods/{podId}
-```
+POST https://api.runpod.io/graphql?api_key=<api_key>
+Content-Type: application/json
 
-Pod is ready when `publicIp` field is non-empty.
+{"query": "query { pod(input: {podId: \"xxx\"}) { id runtime { ports { ip isIpPublic privatePort publicPort type } gpus { id } } } }"}
+```
 
 ### Terminate Pod
 ```
@@ -180,3 +256,20 @@ runpod-launcher/
 ├── .gitignore                  # Ignores temp files
 └── README.md                   # This file
 ```
+
+## Changelog
+
+### v2 (Jan 2026)
+- **Progress phases** - Shows meaningful status (Waiting for GPU, Pulling image, etc.)
+- **Load time tracking** - Displays total time to ready
+- **Rotating tips** - 12 helpful tips while waiting
+- **File Browser credentials** - Shows `admin / runpod` in connection info
+- **Compact technical info** - Configuration details dimmed at top
+- **Tab order fix** - File Browser opens last (becomes active tab)
+- **Session duration** - Balance updates show elapsed session time
+
+### v1 (Jan 2026)
+- Initial release
+- One-click pod launch
+- Auto-termination on exit
+- Account balance display
