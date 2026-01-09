@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Send to Printer
+Comment=Open latest STL export in OrcaSlicer for printing
+Exec=/usr/local/bin/open-in-print-slicer
+Icon=printer
+Terminal=false
+Type=Application
+Categories=Graphics;Engineering;
