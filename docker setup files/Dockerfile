@@ -29,6 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11-xserver-utils xauth mesa-utils \
     # 3D Slicer dependencies
     libgl1 libglu1-mesa libxrender1 libxcursor1 libxft2 libxinerama1 \
+    # 3D printing slicers (OrcaSlicer, PrusaSlicer, Cura) dependencies
+    libwebkit2gtk-4.1-0 \
     libxi6 libxrandr2 libxss1 libxtst6 libpulse0 libnss3 libxcomposite1 \
     libxdamage1 libxkbcommon0 libxkbcommon-x11-0 libasound2t64 libfontconfig1 \
     libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
@@ -450,10 +452,15 @@ COPY claude.desktop /root/Desktop/Tools/Claude.desktop
 COPY DicomWatcher/start-file-watcher.sh /root/Desktop/Tools/start-file-watcher
 RUN chmod +x /root/Desktop/Tools/start-file-watcher
 
-# STL Export trigger script
+# 3D Model Export trigger script
 COPY export-stl.sh /usr/local/bin/export-stl
 RUN chmod +x /usr/local/bin/export-stl
-COPY export-stl.desktop /root/Desktop/ExportSTL.desktop
+COPY export-stl.desktop /root/Desktop/Create3DModels.desktop
+
+# Print 3D Models script (on-demand slicer download + launch)
+COPY print-3d-models.sh /usr/local/bin/print-3d-models
+RUN chmod +x /usr/local/bin/print-3d-models
+COPY print-3d-models.desktop /root/Desktop/Print3DModels.desktop
 
 # XFCE autostart: Launch file watcher when VNC desktop session starts
 # (not at container boot - only when user connects to VNC)
@@ -509,6 +516,9 @@ RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup \
     /root/Desktop/Tools/start-file-watcher \
     /usr/local/share/slicer/*.py /root/.slicerrc.py \
     /root/.config/autostart/*.desktop 2>/dev/null || true
+
+# Create slicer cache directory (persisted on /workspace volume)
+RUN mkdir -p /workspace/.slicers
 
 # Verify all critical binaries are working (not just existing)
 # This catches corruption that can occur when building on Windows

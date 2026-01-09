@@ -17,7 +17,7 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **nvtop** - GPU monitoring tool
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
-- **STL/OBJ Export** - One-click export of all segments for 3D printing
+- **3D Model Export** - One-click export of all segments as STL/OBJ for 3D printing
 - **DICOM Utilities** - watchdog for folder monitoring
 
 ## Prerequisites
@@ -52,9 +52,9 @@ docker-build/
 ├── nninteractive.desktop       # Tools folder - manual restart for server
 ├── export-segments.py          # Slicer script for STL/OBJ export (loaded via .slicerrc.py)
 ├── export-stl.sh               # Export trigger script (installed to /usr/local/bin)
-├── export-stl.desktop          # Desktop shortcut
-├── orcaslicer.desktop          # Tools folder - 3D print slicer
-├── send-to-printer.desktop     # Desktop shortcut - opens latest export in OrcaSlicer
+├── export-stl.desktop          # Desktop shortcut ("Create 3D Models")
+├── print-3d-models.sh          # Slicer launcher with on-demand download
+├── print-3d-models.desktop     # Desktop shortcut ("Print 3D Models")
 ├── firefox.desktop             # Tools folder
 ├── github.desktop              # Tools folder
 ├── fiji.desktop                # Tools folder
@@ -223,12 +223,12 @@ The DICOM auto-loader is **integrated into the File Transfer service** and start
 
 The actual DICOM parsing and loading is handled by 3D Slicer's robust DICOM module.
 
-### STL Export (Desktop Shortcut)
+### Create 3D Models (Desktop Shortcut)
 
-Click the "Export STL" icon on the desktop to export all segments from running Slicer instances as STL files.
+Click the "Create 3D Models" icon on the desktop to export all segments from running Slicer instances as STL files.
 
 **How it works:**
-1. Click "Export STL" on desktop
+1. Click "Create 3D Models" on desktop
 2. All running Slicer instances check for the export trigger
 3. Each Slicer exports its segments to `/FILE TRANSFERS/Export_{timestamp}/`
 4. Skips internal nnInteractive segments (`<bg>`, `<fg>`)
@@ -253,6 +253,33 @@ Click the "Export STL" icon on the desktop to export all segments from running S
 - Each Slicer instance exports independently
 - STL files are named after the segment names
 - Download via File Browser (port 8080)
+
+### Print 3D Models (Desktop Shortcut)
+
+Click the "Print 3D Models" icon to launch slicer software and prepare your exported models for 3D printing.
+
+**Supported Slicers (downloaded on-demand):**
+
+| Slicer | Cloud Printers | Other Compatible Printers |
+|--------|----------------|---------------------------|
+| OrcaSlicer | Bambu Lab (X1, P1, A1) | Prusa, Voron, Creality, Anycubic, Artillery |
+| PrusaSlicer | Prusa (MK3, MK4, Mini, XL) | Generic FDM printers |
+| Cura | UltiMaker | Creality, Anker, Elegoo, many others |
+| Luban | Snapmaker (all models) | - |
+
+**How it works:**
+1. Click "Print 3D Models" on desktop
+2. Select your slicer software (matched to your printer brand)
+3. If not cached, the latest version downloads automatically (~150-300 MB)
+4. Select which export to load (if multiple exist)
+5. Review the "Next Steps" instructions
+6. Press Enter to launch the slicer with your model loaded
+
+**Slicer cache location:** `/workspace/.slicers/` (persists across pod restarts)
+
+**Sending to your printer:**
+- **Cloud printing:** Log in to your printer's cloud service within the slicer, then send directly
+- **Manual transfer:** Export G-code to `/FILE TRANSFERS/`, download via browser (port 8080), copy to USB/SD
 
 ## Using the Environment
 

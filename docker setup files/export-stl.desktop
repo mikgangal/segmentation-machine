@@ -1,8 +1,8 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Export STL
-Comment=Export all Slicer segments as STL files
+Name=Create 3D Models
+Comment=Export all Slicer segments as STL/OBJ files for 3D printing
 Exec=/usr/local/bin/export-stl
 Icon=document-save
 Terminal=false

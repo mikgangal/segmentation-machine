@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Print 3D Models
+Comment=Launch slicer software to prepare models for 3D printing
+Exec=/usr/local/bin/print-3d-models
+Icon=model
+Terminal=false
+Categories=Graphics;Medical;

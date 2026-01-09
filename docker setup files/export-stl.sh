@@ -1,6 +1,6 @@
 #!/bin/bash
-# Export STL Trigger Script
-# Creates a trigger file that running Slicer instances will detect
+# Create 3D Models Trigger Script
+# Creates a trigger file that running Slicer instances will detect and export STL/OBJ files
 
 TRIGGER_DIR="/tmp"
 TRIGGER_PREFIX="slicer-export-trigger-"
@@ -14,9 +14,9 @@ TRIGGER_FILE="${TRIGGER_DIR}/${TRIGGER_PREFIX}${TIMESTAMP}"
 if ! pgrep -f "Slicer" > /dev/null; then
     # Show notification if possible, otherwise use xmessage or zenity
     if command -v notify-send &> /dev/null; then
-        notify-send "Export STL" "No 3D Slicer instance is running" --icon=dialog-warning
+        notify-send "Create 3D Models" "No 3D Slicer instance is running" --icon=dialog-warning
     elif command -v zenity &> /dev/null; then
-        zenity --warning --text="No 3D Slicer instance is running" --title="Export STL"
+        zenity --warning --text="No 3D Slicer instance is running" --title="Create 3D Models"
     else
         xmessage -center "No 3D Slicer instance is running"
     fi
@@ -28,7 +28,7 @@ touch "$TRIGGER_FILE"
 
 # Brief notification
 if command -v notify-send &> /dev/null; then
-    notify-send "Export STL" "Exporting segments to $EXPORT_BASE" --icon=document-save
+    notify-send "Create 3D Models" "Exporting segments to $EXPORT_BASE" --icon=document-save
 fi
 
-echo "Export triggered. STL files will appear in $EXPORT_BASE"
+echo "Export triggered. 3D model files will appear in $EXPORT_BASE"
