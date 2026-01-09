@@ -270,34 +270,6 @@ RUN for i in 1 2 3; do \
     done && test -x /opt/blender/blender
 
 # ============================================
-# STAGE 4g: Install OrcaSlicer (for 3D printing)
-# ============================================
-# OrcaSlicer is a fork of Bambu Studio with multi-printer support
-# Has built-in cloud sync for Bambu Lab printers and supports many others
-# AppImage needs FUSE, but we extract it instead for Docker compatibility
-RUN apt-get update && apt-get install -y --no-install-recommends libfuse2 && \
-    rm -rf /var/lib/apt/lists/*
-RUN for i in 1 2 3; do \
-        echo "Attempt $i: Installing OrcaSlicer..." && \
-        rm -rf /tmp/orca.AppImage /opt/orcaslicer && \
-        ORCA_VERSION=$(curl -s https://api.github.com/repos/SoftFever/OrcaSlicer/releases/latest | grep -Po '"tag_name": "v\K[^"]*') && \
-        echo "Downloading OrcaSlicer v${ORCA_VERSION}..." && \
-        wget -q "https://github.com/SoftFever/OrcaSlicer/releases/download/v${ORCA_VERSION}/OrcaSlicer_Linux_V${ORCA_VERSION}.AppImage" \
-            -O /tmp/orca.AppImage && \
-        chmod +x /tmp/orca.AppImage && \
-        mkdir -p /opt/orcaslicer && \
-        cd /opt/orcaslicer && \
-        /tmp/orca.AppImage --appimage-extract > /dev/null 2>&1 && \
-        mv squashfs-root/* . && \
-        rmdir squashfs-root && \
-        rm /tmp/orca.AppImage && \
-        test -x /opt/orcaslicer/AppRun && \
-        echo "OrcaSlicer installation verified" && \
-        break || \
-        { echo "Attempt $i failed, cleaning up and retrying..."; rm -rf /tmp/orca.AppImage /opt/orcaslicer; sleep 3; }; \
-    done && test -x /opt/orcaslicer/AppRun
-
-# ============================================
 # STAGE 5: Download model weights
 # ============================================
 # The server looks for weights at .nninteractive_weights/nnInteractive_v1.0 relative to cwd
@@ -424,64 +396,6 @@ else
 fi
 EOF
 
-# OrcaSlicer launcher with GPU acceleration (for 3D printing)
-RUN cat > /usr/local/bin/OrcaSlicer << 'EOF' && chmod +x /usr/local/bin/OrcaSlicer
-#!/bin/bash
-if [ -x /opt/VirtualGL/bin/vglrun ]; then
-    # Use VirtualGL for GPU acceleration
-    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
-    export __GLX_VENDOR_LIBRARY_NAME=nvidia
-    export VGL_DISPLAY=egl
-    exec /opt/VirtualGL/bin/vglrun -d egl /opt/orcaslicer/AppRun "$@"
-else
-    # Fallback: run without VirtualGL
-    exec /opt/orcaslicer/AppRun "$@"
-fi
-EOF
-
-# Open latest export in OrcaSlicer (for 3D printing workflow)
-RUN cat > /usr/local/bin/open-in-print-slicer << 'EOF' && chmod +x /usr/local/bin/open-in-print-slicer
-#!/bin/bash
-# Opens the most recent STL export folder in OrcaSlicer
-# User can then slice and send to their cloud-connected printer
-
-EXPORT_BASE="/FILE TRANSFERS"
-
-# Find the most recent Export_ folder
-LATEST_EXPORT=$(ls -td "${EXPORT_BASE}"/Export_* 2>/dev/null | head -1)
-
-if [ -z "$LATEST_EXPORT" ]; then
-    if command -v notify-send &> /dev/null; then
-        notify-send "Print Slicer" "No exports found in $EXPORT_BASE" --icon=dialog-warning
-    elif command -v zenity &> /dev/null; then
-        zenity --warning --text="No exports found in $EXPORT_BASE" --title="Print Slicer"
-    else
-        xmessage -center "No exports found in $EXPORT_BASE"
-    fi
-    exit 1
-fi
-
-# Find STL files in the export folder
-STL_FILES=$(find "$LATEST_EXPORT" -name "*.stl" -type f 2>/dev/null)
-
-if [ -z "$STL_FILES" ]; then
-    if command -v notify-send &> /dev/null; then
-        notify-send "Print Slicer" "No STL files found in $LATEST_EXPORT" --icon=dialog-warning
-    fi
-    exit 1
-fi
-
-# Count files
-FILE_COUNT=$(echo "$STL_FILES" | wc -l)
-
-if command -v notify-send &> /dev/null; then
-    notify-send "Print Slicer" "Opening $FILE_COUNT STL file(s) from $(basename "$LATEST_EXPORT")" --icon=document-open
-fi
-
-# Open OrcaSlicer with all STL files
-exec /usr/local/bin/OrcaSlicer $STL_FILES &
-EOF
-
 # ============================================
 # STAGE 10: VNC and desktop configuration
 # ============================================
@@ -531,10 +445,6 @@ COPY blender.desktop /root/Desktop/Tools/Blender.desktop
 COPY DicomWatcher/filebrowser.desktop /root/Desktop/Tools/FileTransfer.desktop
 COPY nvtop.desktop /root/Desktop/Tools/nvtop.desktop
 COPY claude.desktop /root/Desktop/Tools/Claude.desktop
-COPY orcaslicer.desktop /root/Desktop/Tools/OrcaSlicer.desktop
-
-# Send to Printer shortcut (on main desktop for easy access)
-COPY send-to-printer.desktop /root/Desktop/SendToPrinter.desktop
 
 # Hybrid File Transfer + DICOM Watcher script (combines filebrowser + DICOM auto-loader)
 COPY DicomWatcher/start-file-watcher.sh /root/Desktop/Tools/start-file-watcher
@@ -609,7 +519,6 @@ RUN echo "Verifying critical binaries..." && \
     /opt/slicer/Slicer --version 2>/dev/null || true && \
     /opt/fiji/fiji-linux-x64 --help 2>/dev/null | head -1 || true && \
     /opt/blender/blender --version && \
-    /opt/orcaslicer/AppRun --help 2>/dev/null | head -1 || true && \
     /opt/VirtualGL/bin/vglrun -d egl /bin/true && \
     /opt/TurboVNC/bin/vncserver -help 2>&1 | head -1 && \
     echo "All binary verifications passed"

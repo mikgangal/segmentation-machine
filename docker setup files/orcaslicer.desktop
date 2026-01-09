@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=OrcaSlicer
-Comment=3D Print Slicer (Bambu, Prusa, and more)
-Exec=/usr/local/bin/OrcaSlicer
-Icon=/opt/orcaslicer/resources/images/OrcaSlicer.png
-Terminal=false
-Type=Application
-Categories=Graphics;Engineering;
