@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=File Transfer + T2 Watcher
-Comment=Starts file browser and watches for T2 DICOM uploads
+Name=File Transfer + DICOM Watcher
+Comment=Starts file browser and watches for DICOM uploads
 Exec=/root/Desktop/Tools/start-file-watcher
 Terminal=false
 Hidden=false

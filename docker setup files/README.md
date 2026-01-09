@@ -11,13 +11,14 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **noVNC** - Browser-based VNC fallback (same desktop session)
 - **Pre-downloaded Model Weights** - Works immediately, no downloads on startup
 - **Claude Code CLI** - AI coding assistant from Anthropic
-- **File Transfer + T2 Watcher** - Auto-starts on VNC connect, web uploads + auto-load T2 into Slicer
+- **File Transfer + DICOM Watcher** - Auto-starts on VNC connect, web uploads + auto-load into Slicer
 - **Firefox** - Default web browser (pre-configured, no setup prompts)
 - **GitHub CLI + lazygit** - Git workflow with visual terminal UI
 - **nvtop** - GPU monitoring tool
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
-- **DICOM Utilities** - pydicom + watchdog for T2 auto-loader scripts
+- **STL/OBJ Export** - One-click export of all segments for 3D printing
+- **DICOM Utilities** - watchdog for folder monitoring
 
 ## Prerequisites
 
@@ -44,11 +45,14 @@ docker-build/
 ├── github-launcher
 ├── firefox-policies.json
 ├── DicomWatcher/               # DICOM watcher + file transfer
-│   ├── start-file-watcher.sh   # Hybrid: file browser + T2 auto-loader + nnInteractive
+│   ├── start-file-watcher.sh   # Hybrid: file browser + DICOM auto-loader + nnInteractive
 │   ├── file-watcher.desktop    # XFCE autostart entry
 │   └── filebrowser.desktop     # Tools folder shortcut
-├── slicer.desktop              # Main desktop
-├── nninteractive.desktop       # Manual restart for nnInteractive server
+├── slicer.desktop              # Tools folder
+├── nninteractive.desktop       # Tools folder - manual restart for server
+├── export-segments.py          # Slicer script for STL/OBJ export (loaded via .slicerrc.py)
+├── export-stl.sh               # Export trigger script (installed to /usr/local/bin)
+├── export-stl.desktop          # Desktop shortcut
 ├── firefox.desktop             # Tools folder
 ├── github.desktop              # Tools folder
 ├── fiji.desktop                # Tools folder
@@ -157,28 +161,10 @@ This hybrid service **automatically launches when you connect to VNC** - no manu
 3. nnInteractive server starts on port 8000 (ready for AI segmentation)
 4. File browser starts on port 8080
 5. Folder watcher monitors `/FILE TRANSFERS` for new DICOM uploads
-6. Any uploaded folder with T2 sequences auto-loads into 3D Slicer
+6. Any uploaded DICOM folder auto-loads ALL series into 3D Slicer
+7. User selects which volume to segment in nnInteractive module
 
-**Terminal shows:**
-```
-============================================================
-  DICOM WATCHER + AI SEGMENTATION
-============================================================
-
-  File Transfer:   https://{pod_id}-8080.proxy.runpod.net/files/FILE%20TRANSFERS/
-  Login:           admin / runpod
-
-  nnInteractive:   Running on port 8000
-  Watching:        /FILE TRANSFERS
-  Action:          Auto-load T2 DICOM into 3D Slicer
-
-============================================================
-
-Upload DICOM folders via browser - T2 series will auto-load!
-Press Ctrl+C to stop.
-```
-
-**Closing the terminal stops all services** (file browser, nnInteractive, watcher). To restart manually, double-click "File Transfer + T2 Watcher" in the Tools folder.
+**Closing the terminal stops all services** (file browser, nnInteractive, watcher). To restart manually, double-click "File Transfer + DICOM Watcher" in the Tools folder.
 
 ### Claude Code CLI
 - Run from terminal: `claude`
@@ -212,62 +198,59 @@ The "GitHub" desktop shortcut provides a streamlined Git workflow:
 | `?` | Show all keybindings |
 | `q` | Quit |
 
-### T2 DICOM Auto-Loader (Integrated)
+### DICOM Auto-Loader (Integrated)
 
-The T2 auto-loader is now **integrated into the File Transfer service** and starts automatically when you connect to VNC.
+The DICOM auto-loader is **integrated into the File Transfer service** and starts automatically when you connect to VNC.
 
 #### Workflow:
 1. Connect to VNC - file watcher starts automatically
 2. Upload a DICOM folder via the web interface (port 8080)
 3. Watcher waits for upload to complete (detects when files stop arriving)
-4. Scans for T2 sequences in the uploaded folder
-5. Launches 3D Slicer with GPU acceleration and loads T2 series
+4. Launches 3D Slicer with GPU acceleration
+5. Imports folder into Slicer's DICOM database
+6. Loads ALL series into Slicer
+7. Switches to nnInteractive module - user selects which volume to segment
 
-**How it works (Technical Details):**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    T2 Auto-Loader Flow                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. SCAN: glob.glob("**/*.dcm", recursive=True)                │
-│     └── Finds all DICOM files in folder tree                   │
-│                                                                 │
-│  2. READ: pydicom.dcmread(file, stop_before_pixels=True)       │
-│     └── Reads only metadata (fast, skips pixel data)           │
-│                                                                 │
-│  3. IDENTIFY: Check SeriesDescription + ProtocolName           │
-│     └── Match patterns: T2, T2W, T2_, _T2 (case-insensitive)  │
-│                                                                 │
-│  4. GROUP: Collect files by SeriesInstanceUID                  │
-│     └── Groups slices belonging to same series                 │
-│                                                                 │
-│  5. LAUNCH: subprocess.Popen(["/usr/local/bin/Slicer", ...])  │
-│     └── Starts Slicer with GPU (VirtualGL) wrapper             │
-│                                                                 │
-│  6. LOAD: Generate temp Python script for Slicer               │
-│     └── Uses DICOMUtils.loadSeriesByUID() to load series       │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**DICOM Tags Used:**
-| Tag | Name | Example |
-|-----|------|---------|
-| `(0008,103E)` | SeriesDescription | "SAG T2 sms" |
-| `(0018,1030)` | ProtocolName | "SAG T2 sms" |
-| `(0020,000E)` | SeriesInstanceUID | Unique series identifier |
+**Supported DICOM formats:**
+- `.dcm`, `.DCM`, `.dicom` extensions
+- Extensionless DICOM files (common in medical imaging)
+- Any modality: MRI, CT, ultrasound, PET, etc.
 
 **Dependencies:**
-- `pydicom` - Read DICOM metadata
-- `watchdog` - Folder monitoring (for watcher script)
+- `watchdog` - Folder monitoring
 
-Both are pre-installed in the Docker image.
+The actual DICOM parsing and loading is handled by 3D Slicer's robust DICOM module.
 
-**Compatibility:**
-Works with any DICOM source (CT, MRI from any vendor) as long as:
-- Files have `.dcm` extension
-- SeriesDescription or ProtocolName contains "T2"
+### STL Export (Desktop Shortcut)
+
+Click the "Export STL" icon on the desktop to export all segments from running Slicer instances as STL files.
+
+**How it works:**
+1. Click "Export STL" on desktop
+2. All running Slicer instances check for the export trigger
+3. Each Slicer exports its segments to `/FILE TRANSFERS/Export_{timestamp}/`
+4. Skips internal nnInteractive segments (`<bg>`, `<fg>`)
+5. Creates a summary file with export details
+
+**Output:**
+```
+/FILE TRANSFERS/
+└── Export_20260109_143052/
+    ├── Liver.stl
+    ├── Kidney_Left.stl
+    ├── Kidney_Right.stl
+    ├── combined_all_segments.obj   ← All segments in one file
+    └── EXPORT_SUMMARY.txt
+```
+
+- **Individual STL files** - One per segment, for separate printing/editing
+- **Combined OBJ file** - All segments together, preserving spatial relationships
+
+**Notes:**
+- Slicer must be running for export to work
+- Each Slicer instance exports independently
+- STL files are named after the segment names
+- Download via File Browser (port 8080)
 
 ## Using the Environment
 
@@ -477,10 +460,26 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
 - [Claude Code](https://github.com/anthropics/claude-code) - AI coding assistant by Anthropic
 - [Fiji (ImageJ)](https://fiji.sc/) - Scientific image analysis platform
 - [Blender](https://www.blender.org/) - 3D creation suite
-- [pydicom](https://pydicom.github.io/) - Pure Python DICOM library
 - [watchdog](https://python-watchdog.readthedocs.io/) - File system events monitoring
 
 ## Version History
+
+- **v18** - January 2026
+  - **Simplified DICOM loading** - removed T2-specific detection, now loads ALL series
+    - Works with any modality: MRI (any sequence), CT, ultrasound, PET, etc.
+    - User selects which volume to segment in nnInteractive module
+    - Leverages 3D Slicer's robust DICOM module instead of custom parsing
+  - **Improved DICOM file detection** - finds `.dcm`, `.DCM`, `.dicom`, and extensionless files
+  - **Removed pydicom dependency** - no longer needed for metadata parsing
+  - **Desktop cleanup** - moved all shortcuts to Tools folder (cleaner desktop)
+  - **STL/OBJ Export feature** - new desktop shortcut to export all segments
+    - Click "Export STL" to export from any running Slicer instance
+    - Creates timestamped folder in `/FILE TRANSFERS/`
+    - Exports individual STL files per segment
+    - Exports combined OBJ file with all segments (preserves spatial relationships)
+    - Automatically skips nnInteractive internal segments (`<bg>`, `<fg>`)
+    - Includes summary file with export details
+  - **Data Probe auto-collapse** - the lower-left Data Probe widget now auto-collapses on Slicer startup for a cleaner interface
 
 - **v17** - January 2026
   - **Split terminal logging** - Verbose service logs now in separate minimized terminal
@@ -512,10 +511,10 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
   - **Cleanup** - Removed legacy files `start-filebrowser` and `watch_for_t2.sh`
 
 - **v15** - January 2026
-  - **Hybrid File Transfer + T2 Watcher** - Combined file browser and T2 auto-loader into single service
+  - **Hybrid File Transfer + DICOM Watcher** - Combined file browser and DICOM auto-loader into single service
     - Auto-starts when VNC connects (not at container boot)
     - Opens terminal window with log showing URL, credentials, and watcher status
-    - Closing terminal stops both file browser and T2 watcher
+    - Closing terminal stops both file browser and DICOM watcher
     - Manual restart available from Tools folder
   - **Smart upload detection** - Waits for upload to complete before scanning
     - Monitors file count and total size every second
@@ -523,7 +522,7 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
     - Handles slow uploads where files arrive one-by-one
   - **XFCE autostart integration** - Uses `~/.config/autostart/` for VNC session startup
   - **Removed separate scripts** - `start-filebrowser` and `watch_for_t2.sh` replaced by `start-file-watcher`
-  - **Updated desktop shortcut** - "File Transfer + T2 Watcher" now launches hybrid script
+  - **Updated desktop shortcut** - "File Transfer + DICOM Watcher" now launches hybrid script
 
 - **v14** - January 2026
   - **Added T2 DICOM Folder Watcher** (`watch_for_t2.sh`) for streamlined MRI workflow

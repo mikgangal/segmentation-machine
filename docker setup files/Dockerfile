@@ -122,11 +122,10 @@ RUN uv pip install \
 ENV PATH="/opt/uv-tools/bin:$PATH"
 
 # ============================================
-# STAGE 4a2: Install DICOM utilities for T2 auto-loader script
+# STAGE 4a2: Install DICOM utilities for auto-loader script
 # ============================================
-# pydicom: Read DICOM metadata (SeriesDescription, ProtocolName) to identify T2 sequences
 # watchdog: Monitor folders for new DICOM studies and auto-load into Slicer
-RUN pip install --break-system-packages pydicom watchdog
+RUN pip install --break-system-packages watchdog
 
 # ============================================
 # STAGE 4b: Install Node.js 22 and Claude Code CLI
@@ -346,6 +345,27 @@ EOF
 RUN echo '#!/bin/bash\nexec nninteractive-slicer-server "$@"' \
     > /usr/local/bin/start-nninteractive && chmod +x /usr/local/bin/start-nninteractive
 
+# STL export polling script - loaded via Slicer's startup file (.slicerrc.py)
+# This ensures it runs on every Slicer startup regardless of how Slicer is launched
+RUN mkdir -p /usr/local/share/slicer
+COPY export-segments.py /usr/local/share/slicer/export-segments.py
+RUN mkdir -p /root && \
+    cat > /root/.slicerrc.py << 'SLICERRC'
+# Collapse the Data Probe widget (lower left corner)
+def collapseDataProbe():
+    try:
+        import slicer
+        w = slicer.util.findChild(slicer.util.mainWindow(), 'DataProbeCollapsibleWidget')
+        if w: w.collapsed = True
+    except: pass
+
+import qt
+qt.QTimer.singleShot(1000, collapseDataProbe)
+
+# Load STL export polling script
+exec(open("/usr/local/share/slicer/export-segments.py").read())
+SLICERRC
+
 # Blender launcher with GPU acceleration (falls back to software rendering if VirtualGL unavailable)
 RUN cat > /usr/local/bin/Blender << 'EOF' && chmod +x /usr/local/bin/Blender
 #!/bin/bash
@@ -412,14 +432,12 @@ NOVNC_EOF
 COPY xstartup /root/.vnc/xstartup
 RUN chmod +x /root/.vnc/xstartup
 
-# Desktop shortcuts - Main apps on desktop, tools in Tools folder
+# Desktop shortcuts - All apps in Tools folder
 RUN mkdir -p /root/Desktop/Tools
 
-# Main workflow apps on desktop
-COPY slicer.desktop /root/Desktop/Slicer.desktop
-COPY nninteractive.desktop /root/Desktop/nnInteractive.desktop
-
 # Tools folder
+COPY slicer.desktop /root/Desktop/Tools/Slicer.desktop
+COPY nninteractive.desktop /root/Desktop/Tools/nnInteractive.desktop
 COPY firefox.desktop /root/Desktop/Tools/Firefox.desktop
 COPY github.desktop /root/Desktop/Tools/GitHub.desktop
 COPY fiji.desktop /root/Desktop/Tools/Fiji.desktop
@@ -428,16 +446,21 @@ COPY DicomWatcher/filebrowser.desktop /root/Desktop/Tools/FileTransfer.desktop
 COPY nvtop.desktop /root/Desktop/Tools/nvtop.desktop
 COPY claude.desktop /root/Desktop/Tools/Claude.desktop
 
-# Hybrid File Transfer + T2 Watcher script (combines filebrowser + T2 auto-loader)
+# Hybrid File Transfer + DICOM Watcher script (combines filebrowser + DICOM auto-loader)
 COPY DicomWatcher/start-file-watcher.sh /root/Desktop/Tools/start-file-watcher
 RUN chmod +x /root/Desktop/Tools/start-file-watcher
+
+# STL Export trigger script
+COPY export-stl.sh /usr/local/bin/export-stl
+RUN chmod +x /usr/local/bin/export-stl
+COPY export-stl.desktop /root/Desktop/ExportSTL.desktop
 
 # XFCE autostart: Launch file watcher when VNC desktop session starts
 # (not at container boot - only when user connects to VNC)
 RUN mkdir -p /root/.config/autostart
 COPY DicomWatcher/file-watcher.desktop /root/.config/autostart/file-watcher.desktop
 
-RUN chmod +x /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop
+RUN chmod +x /root/Desktop/Tools/*.desktop /root/Desktop/*.desktop
 
 # Hide default desktop icons (home, filesystem, trash)
 RUN mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml && \
@@ -456,7 +479,7 @@ RUN mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml && \
 EOF
 
 # NOTE: start-filebrowser is replaced by start-file-watcher (hybrid script)
-# which combines file browser + T2 DICOM auto-loader
+# which combines file browser + DICOM auto-loader
 
 # GitHub launcher script (handles auth, repo selection, and lazygit)
 COPY github-launcher /usr/local/bin/github-launcher
@@ -482,7 +505,9 @@ RUN chmod +x /start.sh
 # CRITICAL: This must run AFTER all files are copied
 # Fixes CRLF -> LF for all scripts (Windows Docker build issue)
 RUN sed -i 's/\r$//' /usr/local/bin/* /start.sh /root/.vnc/xstartup \
-    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop /root/Desktop/Tools/start-file-watcher \
+    /root/Desktop/*.desktop /root/Desktop/Tools/*.desktop \
+    /root/Desktop/Tools/start-file-watcher \
+    /usr/local/share/slicer/*.py /root/.slicerrc.py \
     /root/.config/autostart/*.desktop 2>/dev/null || true
 
 # Verify all critical binaries are working (not just existing)

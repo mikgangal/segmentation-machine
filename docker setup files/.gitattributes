@@ -2,6 +2,7 @@
 # This prevents CRLF issues when building Docker on Windows
 
 *.sh text eol=lf
+*.py text eol=lf
 *.desktop text eol=lf
 *.json text eol=lf
 xstartup text eol=lf

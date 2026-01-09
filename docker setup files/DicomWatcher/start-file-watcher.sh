@@ -1,7 +1,7 @@
 #!/bin/bash
-# Hybrid script: File Transfer + T2 DICOM Watcher
+# Hybrid script: File Transfer + DICOM Watcher
 # Starts filebrowser and watches /FILE TRANSFERS for new DICOM folders
-# Auto-loads T2 sequences into 3D Slicer
+# Auto-loads ALL DICOM series into 3D Slicer, user selects in nnInteractive
 
 TRANSFER_DIR="/FILE TRANSFERS"
 PORT=8080
@@ -101,7 +101,7 @@ echo "  ║  File Transfer:  $URL"
 echo "  ║  Login:          admin / runpod                        ║"
 echo "  ║                                                        ║"
 echo "  ║  Upload a DICOM folder via browser.                    ║"
-echo "  ║  T2 series will auto-load into 3D Slicer.              ║"
+echo "  ║  All series auto-load into 3D Slicer.                  ║"
 echo "  ║                                                        ║"
 echo "  ╚════════════════════════════════════════════════════════╝"
 echo ""
@@ -112,7 +112,7 @@ echo "  ────────────────────────
 echo ""
 
 # ============================================
-# T2 Watcher (Python) - Clean output only
+# DICOM Watcher (Python) - Load all series
 # ============================================
 python3 << 'PYTHON_SCRIPT'
 import os
@@ -124,104 +124,75 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-try:
-    import pydicom
-except ImportError:
-    print("  ERROR: pydicom not installed")
-    sys.exit(1)
-
 SLICER_PATH = "/usr/local/bin/Slicer"
 WATCH_DIR = "/FILE TRANSFERS"
 processed_folders = set()
 
-def find_t2_series(data_folder):
+def find_dicom_files(data_folder):
+    """Find all DICOM files in folder (any extension)"""
+    # Try common DICOM extensions
     dcm_files = glob.glob(os.path.join(data_folder, "**", "*.dcm"), recursive=True)
-    if not dcm_files:
-        return [], {}, []
+    dcm_files += glob.glob(os.path.join(data_folder, "**", "*.DCM"), recursive=True)
+    dcm_files += glob.glob(os.path.join(data_folder, "**", "*.dicom"), recursive=True)
 
-    t2_files = []
-    series_info = {}
-    series_uids = []
+    # Also check for extensionless DICOM files (common in medical imaging)
+    # by looking for files without extensions in the folder
+    for root, dirs, files in os.walk(data_folder):
+        for f in files:
+            if '.' not in f:  # No extension
+                dcm_files.append(os.path.join(root, f))
 
-    for dcm_path in dcm_files:
-        try:
-            ds = pydicom.dcmread(dcm_path, stop_before_pixels=True)
-            series_desc = getattr(ds, 'SeriesDescription', '') or ''
-            protocol = getattr(ds, 'ProtocolName', '') or ''
-            series_uid = getattr(ds, 'SeriesInstanceUID', '')
-            desc = (series_desc + ' ' + protocol).upper()
+    return list(set(dcm_files))  # Remove duplicates
 
-            t2_patterns = ['T2', 'T2W', 'T2_', '_T2']
-            is_t2 = any(p in desc for p in t2_patterns)
-
-            if is_t2:
-                t2_files.append(dcm_path)
-                if series_uid not in series_info:
-                    series_info[series_uid] = {
-                        'description': series_desc or protocol,
-                        'files': []
-                    }
-                    series_uids.append(series_uid)
-                series_info[series_uid]['files'].append(dcm_path)
-        except Exception:
-            continue
-
-    return t2_files, series_info, series_uids
-
-def get_slicer_load_script(dicom_folder, series_uids):
-    series_list = str(series_uids)
+def get_slicer_load_script(dicom_folder):
     script = f'''
 import slicer
 import os
 import qt
 
 dicom_folder = r"{dicom_folder}"
-series_uids = {series_list}
 
 def loadDICOMData():
-    """Load DICOM data after Slicer is fully initialized"""
+    """Import and load ALL DICOM data from folder"""
     from DICOMLib import DICOMUtils
-
-    # Ensure DICOM module is loaded first
-    try:
-        slicer.util.selectModule('DICOM')
-    except:
-        pass
 
     # Initialize DICOM database
     dbPath = os.path.join(os.path.expanduser("~"), "Documents", "SlicerDICOMDatabase")
     if not os.path.exists(dbPath):
         os.makedirs(dbPath)
 
-    # Open database (this creates it if needed)
     try:
         DICOMUtils.openDatabase(dbPath)
-    except Exception as e:
+    except Exception:
         DICOMUtils.openTemporaryDatabase()
 
     db = slicer.dicomDatabase
     if not db or not db.isOpen:
+        print("Failed to open DICOM database")
         return
 
-    # Import DICOM files
+    # Import all DICOM files from the folder
     indexer = ctk.ctkDICOMIndexer()
     indexer.addDirectory(db, dicom_folder)
     indexer.waitForImportFinished()
 
-    # Load the T2 series
+    # Get all patients/studies/series that were just imported
+    # and load everything
     loadedNodes = []
-    if series_uids:
-        for uid in series_uids:
-            try:
-                nodes = DICOMUtils.loadSeriesByUID([uid])
-                if nodes:
-                    loadedNodes.extend(nodes)
-            except Exception:
-                pass
+    for patient in db.patients():
+        for study in db.studiesForPatient(patient):
+            for series in db.seriesForStudy(study):
+                try:
+                    nodes = DICOMUtils.loadSeriesByUID([series])
+                    if nodes:
+                        loadedNodes.extend(nodes)
+                except Exception as e:
+                    print(f"Could not load series: {{e}}")
 
-    if loadedNodes:
-        # Switch to nnInteractive for AI segmentation
-        slicer.util.selectModule('SlicerNNInteractive')
+    print(f"Loaded {{len(loadedNodes)}} volume(s)")
+
+    # Switch to nnInteractive - user selects which volume to segment
+    slicer.util.selectModule('SlicerNNInteractive')
 
 def maximizeWindow():
     """Maximize the main window"""
@@ -244,17 +215,15 @@ def minimize_terminal():
     except Exception:
         pass
 
-def launch_slicer_with_dicom(dicom_folder, series_uids):
-    script_content = get_slicer_load_script(dicom_folder, series_uids)
+def launch_slicer_with_dicom(dicom_folder):
+    script_content = get_slicer_load_script(dicom_folder)
     with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
         f.write(script_content)
         temp_script = f.name
     try:
-        # Redirect Slicer's output to /dev/null to keep user terminal clean
         devnull = open(os.devnull, 'w')
         subprocess.Popen([SLICER_PATH, '--python-script', temp_script],
                         stdout=devnull, stderr=devnull)
-        # Give Slicer a moment to start, then minimize this terminal
         time.sleep(2)
         minimize_terminal()
         return True
@@ -301,31 +270,27 @@ def process_folder(folder_path):
     if folder_path in processed_folders:
         return
 
-    # Add IMMEDIATELY to prevent race condition from multiple file system events
+    # Add IMMEDIATELY to prevent race condition
     processed_folders.add(folder_path)
 
     folder_name = os.path.basename(folder_path)
     print(f"  ┌─ New folder: {folder_name}")
 
-    # Wait for upload to finish (no new files for 5 seconds)
+    # Wait for upload to finish
     wait_for_upload_complete(folder_path, stable_seconds=5)
 
-    print("  │ Scanning for T2 series...")
+    print("  │ Scanning for DICOM files...")
 
-    t2_files, series_info, series_uids = find_t2_series(folder_path)
+    dcm_files = find_dicom_files(folder_path)
 
-    if t2_files:
-        print(f"  │ Found {len(series_uids)} T2 series:")
-        for uid, info in series_info.items():
-            print(f"  │   • {info['description']} ({len(info['files'])} slices)")
-
-        dicom_folder = os.path.dirname(t2_files[0])
+    if dcm_files:
+        print(f"  │ Found {len(dcm_files)} DICOM files")
         print("  │ Launching 3D Slicer...")
-        launch_slicer_with_dicom(dicom_folder, series_uids)
-        print("  └─ Done! (this window minimized)")
+        launch_slicer_with_dicom(folder_path)
+        print("  └─ Loading all series into Slicer")
         print("")
     else:
-        print("  └─ No T2 series found in this folder.")
+        print("  └─ No DICOM files found")
         print("")
 
 class FolderHandler(FileSystemEventHandler):

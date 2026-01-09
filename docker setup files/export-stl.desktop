@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Export STL
+Comment=Export all Slicer segments as STL files
+Exec=/usr/local/bin/export-stl
+Icon=document-save
+Terminal=false
+Categories=Graphics;Medical;
