@@ -18,6 +18,7 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
 - **STL/OBJ Export** - One-click export of all segments for 3D printing
+- **OrcaSlicer** - 3D print slicer with Bambu Cloud, Prusa Connect, and more
 - **DICOM Utilities** - watchdog for folder monitoring
 
 ## Prerequisites
@@ -53,6 +54,8 @@ docker-build/
 ├── export-segments.py          # Slicer script for STL/OBJ export (loaded via .slicerrc.py)
 ├── export-stl.sh               # Export trigger script (installed to /usr/local/bin)
 ├── export-stl.desktop          # Desktop shortcut
+├── orcaslicer.desktop          # Tools folder - 3D print slicer
+├── send-to-printer.desktop     # Desktop shortcut - opens latest export in OrcaSlicer
 ├── firefox.desktop             # Tools folder
 ├── github.desktop              # Tools folder
 ├── fiji.desktop                # Tools folder
@@ -364,6 +367,7 @@ VNC_RESOLUTION=2560x1440
 | Firefox | Latest (direct from Mozilla, pre-configured) |
 | Fiji (ImageJ) | Latest (with bundled JDK) |
 | Blender | 5.0.1 |
+| OrcaSlicer | Latest (3D print slicer) |
 
 ## GPU Compatibility
 
@@ -659,3 +663,26 @@ For the most reliable builds, use a Linux machine or CI/CD pipeline (GitHub Acti
   - 3D Slicer 5.10.0
   - PyTorch nightly cu128
   - Pre-downloaded model weights
+
+## License
+
+This component is part of the Segmentation Machine project, licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+See the root [LICENSE](../LICENSE) file for full terms.
+
+---
+
+## Instructions for Claude Code
+
+When adding new scripts, files, or functionality to this project:
+
+1. **Add copyright headers** to all new source files:
+   - Shell scripts: `# Copyright (c) 2025-2026 Mik Gangal` + `# Licensed under CC BY-NC-SA 4.0 - https://creativecommons.org/licenses/by-nc-sa/4.0/`
+   - Python: Same format with `#` comments
+   - Go: Same format with `//` comments
+
+2. **Maintain non-commercial licensing** - This project uses CC BY-NC-SA 4.0 due to upstream nnInteractive model weight restrictions
+
+3. **Update LICENSE file** if adding new third-party components - list them in the NOTICES section
+
+4. **Attribution required** for any derivative work or research use

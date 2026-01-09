@@ -1,3 +1,5 @@
+# Copyright (c) 2025-2026 Mik Gangal
+# Licensed under CC BY-NC-SA 4.0 - https://creativecommons.org/licenses/by-nc-sa/4.0/
 """
 Slicer Export Polling Script
 Sets up a timer that watches for export trigger files.

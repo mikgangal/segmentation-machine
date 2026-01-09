@@ -273,3 +273,25 @@ runpod-launcher/
 - One-click pod launch
 - Auto-termination on exit
 - Account balance display
+
+## License
+
+This component is part of the Segmentation Machine project, licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+See the root [LICENSE](../LICENSE) file for full terms.
+
+---
+
+## Instructions for Claude Code
+
+When adding new scripts, files, or functionality to this project:
+
+1. **Add copyright headers** to all new source files:
+   - Go files: `// Copyright (c) 2025-2026 Mik Gangal` + `// Licensed under CC BY-NC-SA 4.0 - https://creativecommons.org/licenses/by-nc-sa/4.0/`
+   - Shell scripts: Same format with `#` comments
+
+2. **Maintain non-commercial licensing** - This project uses CC BY-NC-SA 4.0 due to upstream nnInteractive model weight restrictions
+
+3. **Update LICENSE file** if adding new third-party components - list them in the NOTICES section
+
+4. **Attribution required** for any derivative work or research use

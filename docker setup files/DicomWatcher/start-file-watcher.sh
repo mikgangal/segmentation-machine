@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2025-2026 Mik Gangal
+# Licensed under CC BY-NC-SA 4.0 - https://creativecommons.org/licenses/by-nc-sa/4.0/
+#
 # Hybrid script: File Transfer + DICOM Watcher
 # Starts filebrowser and watches /FILE TRANSFERS for new DICOM folders
 # Auto-loads ALL DICOM series into 3D Slicer, user selects in nnInteractive
