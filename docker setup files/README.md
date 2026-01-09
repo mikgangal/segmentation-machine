@@ -262,10 +262,9 @@ Click the "Print 3D Models" icon to launch slicer software and prepare your expo
 
 | Slicer | Cloud Printers | Other Compatible Printers |
 |--------|----------------|---------------------------|
-| OrcaSlicer | Bambu Lab (X1, P1, A1) | Prusa, Voron, Creality, Anycubic, Artillery |
+| OrcaSlicer | Bambu Lab (X1, P1, A1) | Snapmaker U1, Prusa, Voron, Creality, Anycubic |
 | PrusaSlicer | Prusa (MK3, MK4, Mini, XL) | Generic FDM printers |
 | Cura | UltiMaker | Creality, Anker, Elegoo, many others |
-| Luban | Snapmaker (all models) | - |
 
 **How it works:**
 1. Click "Print 3D Models" on desktop
