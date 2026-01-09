@@ -18,7 +18,6 @@ This folder contains everything needed to build a Docker image for running 3D Sl
 - **Fiji (ImageJ)** - Scientific image analysis platform
 - **Blender 5.0.1** - 3D modeling, animation, and rendering
 - **STL/OBJ Export** - One-click export of all segments for 3D printing
-- **OrcaSlicer** - 3D print slicer with Bambu Cloud, Prusa Connect, and more
 - **DICOM Utilities** - watchdog for folder monitoring
 
 ## Prerequisites
@@ -367,7 +366,6 @@ VNC_RESOLUTION=2560x1440
 | Firefox | Latest (direct from Mozilla, pre-configured) |
 | Fiji (ImageJ) | Latest (with bundled JDK) |
 | Blender | 5.0.1 |
-| OrcaSlicer | Latest (3D print slicer) |
 
 ## GPU Compatibility
 

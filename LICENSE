@@ -36,6 +36,5 @@ This project integrates the following third-party components, each under their o
 - TurboVNC: GPL (https://turbovnc.org)
 - VirtualGL: wxWindows Library License (https://virtualgl.org)
 - File Browser: Apache-2.0 (https://filebrowser.org)
-- OrcaSlicer: AGPL-3.0 (https://github.com/SoftFever/OrcaSlicer)
 
 The nnInteractive model weights are licensed under CC BY-NC-SA 4.0 by the German Cancer Research Center (DKFZ). Commercial use of this platform is restricted by this upstream license.

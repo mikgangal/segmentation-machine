@@ -27,7 +27,6 @@ A fully-loaded medical imaging environment that runs on RunPod:
 | **File Browser** | Web-based file upload (port 8080) |
 | **DICOM Watcher** | Auto-detects and loads uploaded DICOM folders |
 | **STL/OBJ Export** | One-click export for 3D printing |
-| **OrcaSlicer** | 3D print slicer (Bambu, Prusa, Creality, etc.) |
 | **Claude Code CLI** | AI coding assistant |
 | **GitHub CLI + lazygit** | Git workflow tools |
 | **Fiji (ImageJ)** | Scientific image analysis |
@@ -161,7 +160,6 @@ This platform integrates several open-source tools, each under their own license
 | nnInteractive (weights) | CC BY-NC-SA 4.0 | **Non-commercial only** |
 | Blender | GPL | Usage OK, modifications must be shared |
 | Fiji/ImageJ | GPL | Usage OK |
-| OrcaSlicer | AGPL-3.0 | Usage OK |
 
 **Important:** The nnInteractive model weights are licensed CC BY-NC-SA 4.0 by DKFZ (German Cancer Research Center). This upstream license restricts commercial use of the entire platform.
 
